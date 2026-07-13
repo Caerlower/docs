@@ -1,0 +1,99 @@
+---
+title: "On-Chain Agent Identity and Reputation with Stellar8004"
+sidebarTitle: "Identity"
+description: "Nebula registers your agent on Stellar8004, giving it a verifiable on-chain identity NFT and a reputation score other agents can trust."
+---
+
+When your agent makes payments, calls APIs, and interacts with other services on Stellar, it is just a public key — anonymous and without history. Stellar8004, built by Trion Labs, changes that: it mints an on-chain identity NFT for your agent's wallet address, creating a persistent, verifiable record of who your agent is and how it has behaved. Every payment and transaction that flows through your agent's wallet contributes to a reputation score that other agents and services can inspect before deciding whether to trust you.
+
+## What Stellar8004 is
+
+Stellar8004 is an adaptation of the ERC-8004 agent identity standard, implemented as a Soroban smart contract on Stellar. When your agent calls `register_identity`, a non-fungible identity token is minted and linked to your wallet's public key (`G...`). This NFT serves as your agent's on-chain passport — a stable identifier that persists across sessions, deployments, and upgrades.
+
+The identity is **tied to your keypair**, not to the Nebula MCP server itself. If you migrate to a new deployment but keep the same `STELLAR_SECRET_KEY`, your agent retains its identity and reputation history.
+
+## Why it matters
+
+An anonymous wallet address tells a counterparty nothing about the agent behind it. An 8004 identity turns that address into a traceable track record:
+
+- **Verifiable history**: every on-chain action your agent takes accumulates against its identity, creating an auditable log.
+- **Reputation score**: clients and services that interact with your agent can leave feedback. Your agent's average score, feedback count, and number of unique clients are readable by anyone on-chain.
+- **Inter-agent trust**: in a multi-agent economy, agents can query each other's reputation before entering into payment channels, MPP sessions, or data-sharing arrangements.
+- **Discovery**: a named, described agent with a profile image is more discoverable than a raw public key.
+
+## Identity tools
+
+| Tool | Parameters | What it does |
+|------|-----------|-------------|
+| `register_identity` | — | Mints the ERC-8004 agent NFT for your wallet address. Safe to call multiple times — idempotent if your agent is already registered. |
+| `get_my_reputation` | — | Returns your agent's feedback count, average reputation score, and number of unique clients who have submitted feedback. |
+
+## Registering your agent
+
+Registration is a single tool call:
+
+```
+Use register_identity from Nebula
+```
+
+Nebula submits a Soroban transaction that mints the identity NFT to your wallet address. The tool returns your agent ID and links to the explorer where the registration is visible on-chain. If your agent is already registered, calling `register_identity` again is safe — it returns the existing identity rather than creating a duplicate.
+
+## Agent metadata
+
+Enrich your agent's on-chain profile with optional environment variables. These fields are stored with the identity NFT and visible to anyone who looks up your agent on-chain:
+
+| Variable | Purpose | Example |
+|----------|---------|---------|
+| `AGENT8004_NAME` | Human-readable name for your agent | `"Nebula Payment Agent"` |
+| `AGENT8004_DESCRIPTION` | Short description of what your agent does | `"Automates API payments and yield on Stellar"` |
+| `AGENT8004_IMAGE_URL` | URL to an avatar or logo image | `"https://example.com/agent-avatar.png"` |
+
+```json title="Identity metadata in mcp.json"
+{
+  "mcpServers": {
+    "nebula": {
+      "command": "npx",
+      "args": ["-y", "nebula-mcp"],
+      "env": {
+        "STELLAR_SECRET_KEY": "S...",
+        "NETWORK": "testnet",
+        "AGENT8004_NAME": "My Payment Agent",
+        "AGENT8004_DESCRIPTION": "Pays for data APIs and earns yield on idle USDC",
+        "AGENT8004_IMAGE_URL": "https://example.com/avatar.png"
+      }
+    }
+  }
+}
+```
+
+## Checking your reputation
+
+```
+Use get_my_reputation from Nebula
+```
+
+The output includes:
+- **Feedback count**: total number of reviews submitted by clients
+- **Average score**: your agent's mean reputation score across all feedback
+- **Unique clients**: number of distinct counterparties who have submitted feedback
+
+<Note>
+  Reputation is built over time through real interactions. A freshly registered agent will have zero feedback — this is expected. As your agent makes payments and provides value to counterparties, feedback accumulates and the score becomes meaningful.
+</Note>
+
+## Testnet and mainnet contracts
+
+By default, Nebula uses Stellar8004 **testnet contracts**. When you are ready to go to production, set `NETWORK=mainnet` in your MCP environment — Nebula will automatically use the mainnet Stellar8004 contracts for identity registration and reputation queries.
+
+<Warning>
+  Testnet and mainnet identities are separate. A testnet registration does not carry over to mainnet. Register your agent on mainnet before relying on its reputation in production interactions.
+</Warning>
+
+<CardGroup cols={2}>
+  <Card title="Wallet" icon="wallet" href="/concepts/wallet">
+    Set up your agent's Stellar wallet first
+  </Card>
+  <Card title="Payments" icon="bolt" href="/concepts/payments">
+    Learn how x402 and MPP payments build your agent's track record
+  </Card>
+</CardGroup>

@@ -1,0 +1,147 @@
+---
+title: "Nebula Agent Spending Limits — Off-Chain and On-Chain"
+sidebarTitle: "Spending Limits"
+description: "Understand how Nebula's per-call and daily spending caps work, what actions count against them, and when to use off-chain vs on-chain enforcement."
+---
+
+Nebula gives your AI agent real money — which means it needs real guardrails. Every outgoing payment (transfers, x402 API payments, and MPP session budgets) is checked against spending caps before any transaction is signed. There are two enforcement modes: **off-chain limits** stored in environment variables, and **on-chain limits** enforced by a Soroban smart contract. You can start with off-chain limits for fast setup on testnet, then graduate to on-chain enforcement for production mainnet use.
+
+---
+
+## Off-chain limits
+
+Off-chain limits are the simplest way to constrain your agent's spending. Set two environment variables in your MCP config and Nebula's in-process limit engine enforces them before every spend action.
+
+<ParamField query="MAX_PER_CALL" type="number">
+  The maximum amount (in XLM or USDC) your agent can spend in a single action — one transfer, one x402 payment, or one MPP session open. Any action that exceeds this cap is blocked immediately.
+</ParamField>
+
+<ParamField query="MAX_PER_DAY" type="number">
+  The maximum cumulative amount your agent can spend across **all** spend actions within any rolling 24-hour window. The 24-hour window is calculated from the earliest recorded transaction still within the window, not from midnight.
+</ParamField>
+
+**Characteristics of off-chain limits:**
+
+- Simple to configure — no contract deployment required
+- Enforced in-process before transactions are submitted to the network
+- Reset automatically as old transactions roll out of the 24-hour window
+- Not recorded on-chain (no public audit trail)
+- Effective immediately after restarting the MCP server with new values
+
+```json
+{
+  "mcpServers": {
+    "nebula": {
+      "command": "npx",
+      "args": ["-y", "nebula-mcp"],
+      "env": {
+        "STELLAR_SECRET_KEY": "S...",
+        "MAX_PER_CALL": "100",
+        "MAX_PER_DAY": "500"
+      }
+    }
+  }
+}
+```
+
+<Note>
+  Both `MAX_PER_CALL` and `MAX_PER_DAY` must be set for off-chain limits to work. If either is missing and `POLICY_CONTRACT_ID` is also unset, all transfer and payment actions are blocked until the variables are provided.
+</Note>
+
+---
+
+## On-chain limits (Soroban)
+
+On-chain limits use a deployed `nebula-policy` Soroban smart contract to enforce spending caps at the blockchain level. Every spend action calls the contract's `check_spend` function before signing the payment transaction — if the contract rejects it, the transaction never reaches the network.
+
+<ParamField query="POLICY_CONTRACT_ID" type="string">
+  The contract address (`C...`) of your deployed `nebula-policy` contract. When this variable is set, Nebula uses on-chain enforcement exclusively and ignores `MAX_PER_CALL` and `MAX_PER_DAY`.
+</ParamField>
+
+**Characteristics of on-chain limits:**
+
+- Enforced by the Soroban contract before any transaction signs
+- Every spend is recorded on-chain, providing an immutable public audit trail
+- Limits can be updated by the contract owner with `set_policy_limits` — no redeploy required
+- Rolling-window usage is tracked on-chain and survives MCP server restarts
+- Deployment takes one transaction (use `deploy_policy`)
+
+**Deploying a policy contract:**
+
+```text
+Use deploy_policy from Nebula with max_per_call 10 and max_per_day 50
+```
+
+After deployment, copy the returned contract ID into your MCP config:
+
+```json
+{
+  "env": {
+    "STELLAR_SECRET_KEY": "S...",
+    "POLICY_CONTRACT_ID": "CDAXOP..."
+  }
+}
+```
+
+**Updating limits without redeployment:**
+
+```text
+Use set_policy_limits from Nebula with max_per_call 20 and max_per_day 100
+```
+
+**Checking current on-chain usage:**
+
+```text
+Use get_policy_status from Nebula
+```
+
+<Warning>
+  When `POLICY_CONTRACT_ID` is set, `MAX_PER_CALL` and `MAX_PER_DAY` environment variables are **ignored** for enforcement. Only the on-chain contract limits apply. Update limits on-chain using `set_policy_limits`.
+</Warning>
+
+---
+
+## What counts against limits
+
+Not every Nebula action costs money. Treasury operations and read-only tools are never charged against your spending limits. Only actions that move funds out of your wallet are subject to the caps.
+
+| Action | Counts against limits? |
+|--------|----------------------|
+| `transfer_xlm` | **Yes** — full transfer amount |
+| `transfer_usdc` | **Yes** — full transfer amount |
+| `x402_fetch` | **Yes** — payment amount on 402 response |
+| `mpp_open_session` (budget) | **Yes** — full session budget on open |
+| `mpp_fetch` (per-call) | Against the open session's budget only |
+| Treasury rebalance (deposit/withdraw) | **No** |
+| `blend_check_rates` | **No** — read-only |
+| `get_treasury_status` | **No** — read-only |
+| `register_identity` | **No** |
+| `get_my_reputation` | **No** — read-only |
+
+<Note>
+  When an MPP session is open, the full session budget is treated as "reserved" against your daily cap — even before individual `mpp_fetch` calls are made. This prevents a race condition where a second large spend could push you over your daily limit while the session is in-flight. The reserved amount is released when you call `mpp_close_session`.
+</Note>
+
+---
+
+## Checking your limits
+
+Run `spending_report` at any time to see your current caps, rolling-window usage, any active MPP reservation, and remaining budget for the day.
+
+```text
+Use spending_report from Nebula
+```
+
+The report shows:
+
+- **Per-call cap** (`MAX_PER_CALL` or on-chain value)
+- **Daily cap** (`MAX_PER_DAY` or on-chain value)
+- **Spent in the last 24 hours** (rolling window)
+- **MPP session reserved** (if a session is open)
+- **Remaining today** (daily cap minus spent minus reserved)
+
+---
+
+## Recommendation
+
+Start with off-chain limits on testnet to get familiar with the system quickly. When you move to mainnet for production use, deploy an on-chain policy contract for stronger enforcement and a verifiable audit trail. Use `set_policy_limits` to tighten or loosen caps as your agent's usage patterns become clear — no contract redeploy required.

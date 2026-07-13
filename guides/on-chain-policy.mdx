@@ -1,0 +1,147 @@
+---
+title: "Enforce Agent Spending Limits with an On-Chain Policy"
+sidebarTitle: "On-Chain Policy"
+description: "Deploy a Soroban contract that cryptographically enforces your agent's per-call and daily spending caps — limits backed by an immutable on-chain record."
+---
+
+By default, Nebula enforces spending caps using environment variables — fast and simple, but only as strong as your config file. An on-chain policy takes that a step further: a Soroban smart contract on Stellar holds your limits, every payment calls `check_spend` on the contract before it is signed, and every approval is recorded immutably on-chain. Your agent cannot bypass these limits even if it tries to modify its own environment, and you get a transparent audit trail of every spend decision.
+
+## Off-chain vs on-chain limits
+
+| | Off-chain (env vars) | On-chain (Soroban contract) |
+|---|---|---|
+| **Setup** | Set `MAX_PER_CALL` and `MAX_PER_DAY` in config | Deploy once with `deploy_policy` |
+| **Enforcement** | In-process, before signing | Smart contract call before every payment |
+| **Audit trail** | None | Every check recorded on Stellar ledger |
+| **Bypass risk** | Agent with env access could modify limits | Cryptographically enforced — cannot be bypassed in-process |
+| **Update limits** | Edit config and restart | Call `set_policy_limits` — no redeploy |
+| **Build required** | No | No — WASM ships inside the npm package |
+
+Once you set `POLICY_CONTRACT_ID` in your MCP config, the env var limits (`MAX_PER_CALL`, `MAX_PER_DAY`) are **ignored** for enforcement. The contract's on-chain values are the authoritative caps.
+
+<Note>
+  The policy WASM (`policy.wasm`) is bundled inside the `nebula-mcp` npm package under `dist/contracts/`. No separate build or CLI step is needed to deploy it.
+</Note>
+
+## Deploying your policy
+
+<Steps>
+  <Step title="Deploy the policy contract">
+    Ask your agent to deploy a new `nebula-policy` Soroban contract with your desired limits. Amounts are in XLM/USDC units:
+
+    ```text
+    Use deploy_policy from Nebula with max_per_call 50 max_per_day 500
+    ```
+
+    Nebula uploads the bundled WASM, deploys the contract, and initializes it with your limits. The tool returns a contract ID starting with `C`.
+
+    Example output:
+    ```text
+    Policy deployed
+    Contract:      CDAXOPVILENGGLPU3CNOOS53P255PUAVODI4EAJC6A4VIZQT3BAMVTXP
+    Owner:         GABCDE...
+    Max per call:  50
+    Max per day:   500
+    ```
+  </Step>
+  <Step title="Copy the POLICY_CONTRACT_ID">
+    Copy the contract address from the tool output — it starts with `C` and is 56 characters long.
+  </Step>
+  <Step title="Add the contract ID to your MCP config">
+    Open your MCP config and paste the contract ID into the `POLICY_CONTRACT_ID` env field:
+
+    ```json
+    {
+      "mcpServers": {
+        "nebula": {
+          "command": "npx",
+          "args": ["-y", "nebula-mcp"],
+          "env": {
+            "STELLAR_SECRET_KEY": "S...",
+            "NETWORK": "testnet",
+            "POLICY_CONTRACT_ID": "CDAXOPVILENGGLPU3CNOOS53P255PUAVODI4EAJC6A4VIZQT3BAMVTXP",
+            "MAX_PER_CALL": "50",
+            "MAX_PER_DAY": "500"
+          }
+        }
+      }
+    }
+    ```
+
+    <Note>
+      Keep `MAX_PER_CALL` and `MAX_PER_DAY` in your config even after setting `POLICY_CONTRACT_ID`. These values are used as fallbacks during startup validation, but the contract's on-chain values are what Nebula enforces at runtime.
+    </Note>
+  </Step>
+  <Step title="Restart Claude">
+    Quit and reopen Claude Desktop (or reload your MCP host). Nebula connects to the contract on startup.
+  </Step>
+  <Step title="Verify the policy is active">
+    Confirm Nebula is reading limits from the contract:
+
+    ```text
+    Use get_policy_status from Nebula
+    ```
+
+    The response shows the on-chain limits, the rolling 24-hour spend window, and your remaining budget:
+
+    ```text
+    Policy status
+    Contract:         CDAXOPVILENGGLPU3CNOOS53P255PUAVODI4EAJC6A4VIZQT3BAMVTXP
+    Max per call:     50
+    Max per day:      500
+    Spent (24h):      12.5
+    Remaining (24h):  487.5
+    ```
+  </Step>
+</Steps>
+
+## Updating limits without redeploying
+
+You can change your per-call or daily cap on the existing contract at any time — no new deployment required. Only the wallet that deployed the contract (the owner) can update limits:
+
+```text
+Use set_policy_limits from Nebula with max_per_call 100 max_per_day 1000
+```
+
+The new limits take effect immediately on-chain. You do not need to restart Claude or change your MCP config.
+
+<Tip>
+  Use `set_policy_limits` to temporarily raise your caps for a known high-spend operation, then lower them again afterwards — all without touching your config file or redeploying.
+</Tip>
+
+## Checking current spend
+
+Use `get_policy_status` at any time to see your on-chain limits and rolling usage:
+
+```text
+Use get_policy_status from Nebula
+```
+
+You can also use `spending_report` for a combined view of both off-chain and on-chain limits:
+
+```text
+Use spending_report from Nebula
+```
+
+## What is and is not limited
+
+On-chain policy limits apply to all agent-initiated outgoing payments:
+
+- `transfer_xlm` and `transfer_usdc` — checked per transaction
+- `x402_fetch` — checked before each payment
+- `mpp_open_session` — the full budget is checked when the channel opens
+
+Treasury rebalancing is **not** subject to spending policy limits by design. The rebalancer deposits and withdraws funds from Blend on your behalf as part of yield management, not agent-directed spending. See the [Treasury & Yield guide](/guides/treasury-yield) for details.
+
+<Warning>
+  Once `POLICY_CONTRACT_ID` is set, your env var limits (`MAX_PER_CALL`, `MAX_PER_DAY`) are no longer enforced. If you remove `POLICY_CONTRACT_ID` from your config, Nebula falls back to the env var values. Make sure both are set to sensible values in case you ever switch modes.
+</Warning>
+
+<CardGroup cols={2}>
+  <Card title="x402 Payments" icon="credit-card" href="/guides/x402-payments">
+    Understand how x402 payments interact with your spending caps.
+  </Card>
+  <Card title="Connect to Claude" icon="plug" href="/guides/connect-claude">
+    Set up your MCP config and environment variables from scratch.
+  </Card>
+</CardGroup>

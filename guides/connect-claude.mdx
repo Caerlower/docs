@@ -1,0 +1,165 @@
+---
+title: "Install Nebula MCP in Claude Desktop and Claude Code"
+sidebarTitle: "Connect to Claude"
+description: "Add Nebula's Stellar wallet MCP server to Claude Desktop or Claude Code in minutes — paste a JSON config block, add your secret key, and restart."
+---
+
+Nebula is an MCP server that gives your AI agent a real Stellar blockchain wallet — with built-in payments, yield, and spending controls. Adding it to Claude takes about two minutes: paste a JSON config block, drop in your secret key, and restart. This guide walks you through each client option and then shows you the first commands to try.
+
+## Installation
+
+<Tabs>
+  <Tab title="Claude Desktop">
+    Open your Claude Desktop config file at `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS) or `%APPDATA%\Claude\claude_desktop_config.json` (Windows). Add the `nebula` block inside `mcpServers`:
+
+    ```json
+    {
+      "mcpServers": {
+        "nebula": {
+          "command": "npx",
+          "args": ["-y", "nebula-mcp"],
+          "env": {
+            "STELLAR_SECRET_KEY": "YOUR_STELLAR_SECRET_KEY",
+            "NETWORK": "testnet",
+            "MAX_PER_CALL": "1000",
+            "MAX_PER_DAY": "10000",
+            "POLICY_CONTRACT_ID": "",
+            "TREASURY_ASSET": "xlm",
+            "LIQUIDITY_THRESHOLD": "10",
+            "REBALANCE_INTERVAL_SECONDS": "60",
+            "MPP_RECIPIENT": ""
+          }
+        }
+      }
+    }
+    ```
+
+    Replace `YOUR_STELLAR_SECRET_KEY` with your Stellar secret key (starts with `S`). Save the file, then **quit and reopen Claude Desktop** — changes take effect only after a full restart.
+
+    <Tip>
+      No terminal or build step required. `npx` downloads and runs `nebula-mcp` automatically on first launch.
+    </Tip>
+  </Tab>
+
+  <Tab title="Claude Code">
+    For project-scoped access, add Nebula to your project's `.mcp.json` file in the repository root:
+
+    ```json
+    {
+      "mcpServers": {
+        "nebula": {
+          "command": "npx",
+          "args": ["-y", "nebula-mcp"],
+          "env": {
+            "STELLAR_SECRET_KEY": "YOUR_STELLAR_SECRET_KEY",
+            "NETWORK": "testnet",
+            "MAX_PER_CALL": "1000",
+            "MAX_PER_DAY": "10000",
+            "POLICY_CONTRACT_ID": "",
+            "TREASURY_ASSET": "xlm",
+            "LIQUIDITY_THRESHOLD": "10",
+            "REBALANCE_INTERVAL_SECONDS": "60",
+            "MPP_RECIPIENT": ""
+          }
+        }
+      }
+    }
+    ```
+
+    Alternatively, use the Claude CLI to register Nebula globally:
+
+    ```bash
+    claude mcp add nebula \
+      -e STELLAR_SECRET_KEY="S..." \
+      -e NETWORK=testnet \
+      -e MAX_PER_CALL=1000 \
+      -e MAX_PER_DAY=10000 \
+      -- npx -y nebula-mcp
+    ```
+
+    <Note>
+      Committing `.mcp.json` to source control shares the server configuration with your team, but **never commit your secret key**. Use an environment variable or secret manager to inject `STELLAR_SECRET_KEY` at runtime.
+    </Note>
+  </Tab>
+
+  <Tab title="Any MCP Framework">
+    Nebula implements the standard MCP protocol and works with any compatible host. Point your host at the `nebula-mcp` npm package using `npx`:
+
+    ```json
+    {
+      "mcpServers": {
+        "nebula": {
+          "command": "npx",
+          "args": ["-y", "nebula-mcp"],
+          "env": {
+            "STELLAR_SECRET_KEY": "YOUR_STELLAR_SECRET_KEY",
+            "NETWORK": "testnet",
+            "MAX_PER_CALL": "1000",
+            "MAX_PER_DAY": "10000"
+          }
+        }
+      }
+    }
+    ```
+
+    Replace `YOUR_STELLAR_SECRET_KEY` with your Stellar secret key (starts with `S`). Restart your MCP host after adding the configuration.
+  </Tab>
+</Tabs>
+
+## After changing your config
+
+<Warning>
+  Claude Desktop and Claude Code cache MCP server state at startup. Always **quit and fully reopen** your client after editing MCP config files. In Claude Desktop on macOS, use **Quit Claude** from the menu bar — closing the window is not enough.
+</Warning>
+
+## First commands to try
+
+Once Nebula is connected, paste any of these prompts directly into the chat window to verify the integration and explore your wallet:
+
+```text
+Use wallet_dashboard from Nebula
+```
+
+```text
+Use request_funding from Nebula
+```
+
+```text
+Use check_balance from Nebula
+```
+
+<Tip>
+  `wallet_dashboard` renders a live interactive UI panel directly inside the chat window — showing your balances, spending limits, treasury status, and active MPP session in one place. It works in Claude Desktop and other MCP App hosts that support rich tool output.
+</Tip>
+
+## Troubleshooting
+
+**"Invalid secret key" or authentication error**
+Your `STELLAR_SECRET_KEY` must start with the letter `S` and be exactly 56 characters long. Copy it directly from your Stellar wallet or key generation tool — do not add quotes or spaces inside the JSON string value.
+
+**Wrong network — balance shows zero**
+`NETWORK` defaults to `testnet`. If you funded a mainnet wallet, set `"NETWORK": "mainnet"` in your config and restart. Testnet and mainnet wallets are completely separate.
+
+**Tools not appearing in Claude**
+The MCP server must start without errors before Claude registers its tools. Open the Claude Desktop developer console (or check logs) to see if `nebula-mcp` launched successfully. Common causes: missing `STELLAR_SECRET_KEY`, Node version below 18, or a JSON syntax error in the config file.
+
+**Changes not taking effect**
+Restart Claude after every config edit. In Claude Desktop, use the menu bar **Quit** option, not just closing the window.
+
+**"npx: command not found"**
+Node.js 18 or later is required. Install it from [nodejs.org](https://nodejs.org) and ensure `npx` is on your `PATH`.
+
+<CardGroup cols={2}>
+  <Card title="x402 Payments" icon="credit-card" href="/guides/x402-payments">
+    Automatically pay HTTP 402 APIs with USDC — no human in the loop.
+  </Card>
+  <Card title="MPP Sessions" icon="bolt" href="/guides/mpp-sessions">
+    Stream hundreds of micropayments with one on-chain deposit.
+  </Card>
+  <Card title="On-Chain Policy" icon="shield" href="/guides/on-chain-policy">
+    Deploy a Soroban contract to cryptographically enforce spending caps.
+  </Card>
+  <Card title="Treasury & Yield" icon="chart-line" href="/guides/treasury-yield">
+    Earn yield on idle funds with the automated Blend rebalancer.
+  </Card>
+</CardGroup>

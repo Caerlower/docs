@@ -1,0 +1,55 @@
+---
+title: "What Is Nebula? Stellar Wallet MCP Server Explained"
+sidebarTitle: "Introduction"
+description: "Nebula is an MCP server that gives AI agents a real Stellar wallet with payments, yield, on-chain spending policy, and verifiable identity."
+---
+
+Your AI agent can think, plan, and reason — but the moment it hits a paywall, a pay-per-call API, or a service that requires a real on-chain transaction, it stops cold. Nebula solves this by giving your agent a genuine Stellar blockchain wallet through the Model Context Protocol (MCP). One `npx` install, and your agent can pay for resources, earn yield on idle funds, enforce its own spending limits, and build a verifiable on-chain identity — all without any human approval step.
+
+## What your agent gets
+
+Nebula exposes **23 tools** grouped across seven capability areas:
+
+| Capability | What it enables |
+|---|---|
+| **Wallet** | Hold XLM and USDC, check live balances, send transfers to any Stellar address |
+| **x402 payments** | Auto-pay HTTP 402-gated APIs with USDC on the first response — fully autonomous |
+| **MPP sessions** | High-frequency micropayments via one on-chain deposit, unlimited off-chain commits, one on-chain settle |
+| **Treasury yield** | Idle funds auto-earn in Blend lending pools; withdrawn automatically when liquidity drops below your threshold |
+| **Spending policy** | Per-call and rolling 24-hour caps — enforced off-chain by default or on-chain by a Soroban smart contract |
+| **8004 identity** | Mint a Stellar8004 agent NFT and accumulate a verifiable feedback-based reputation score |
+| **Live dashboard** | Interactive wallet UI rendered inside chat (Claude Desktop and MCP Apps) |
+
+## Why Stellar
+
+Stellar is purpose-built for the kind of real-time, high-frequency financial activity that AI agents need:
+
+- **Low fees** — transactions cost fractions of a cent, so per-call micropayments are economically viable
+- **Fast settlement** — 5-second finality means your agent doesn't wait around for confirmations
+- **Native stablecoins** — Circle USDC runs natively on Stellar via a Stellar Asset Contract (SAC), with no bridging required
+- **Live ecosystem** — Blend Finance for yield, Stellar Horizon for data, Friendbot for instant testnet funding, and a growing x402 + MPP payment network
+
+## How it works
+
+Getting your agent from zero to autonomous payments takes three steps:
+
+**1. Plug in** — Add Nebula to your MCP config with a single JSON block. No build step, no cloning. `npx` downloads and runs the server the first time your agent calls a tool.
+
+**2. Set your policy** — Define per-call and daily spending caps in your env vars, or deploy a Soroban `nebula-policy` contract for on-chain enforcement. When a contract is set, the blockchain itself rejects overspend — your agent physically cannot exceed the limits you set.
+
+**3. Let it work** — Your agent pays x402 APIs automatically, routes excess funds into Blend for yield, commits off-chain micropayments through MPP sessions, and builds reputation with every interaction. You watch the dashboard; your agent does the work.
+
+<Note>
+Nebula defaults to **testnet**. You can explore all capabilities, fund a test wallet instantly with Friendbot, and experiment with the full tool set before touching real funds. Set `NETWORK=mainnet` only when you're ready for production.
+</Note>
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Quickstart" icon="bolt" href="/quickstart">
+    Add Nebula to Claude and run your first automated payment in under 5 minutes.
+  </Card>
+  <Card title="Configuration" icon="sliders" href="/configuration">
+    Explore every environment variable — network, spending limits, treasury, and identity metadata.
+  </Card>
+</CardGroup>

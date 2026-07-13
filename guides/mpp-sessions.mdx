@@ -1,0 +1,117 @@
+---
+title: "Make Hundreds of Micropayments with One MPP Session"
+sidebarTitle: "MPP Sessions"
+description: "Open an MPP payment channel to make hundreds of off-chain micropayments in one session and settle everything with a single on-chain transaction."
+---
+
+MPP (Micropayment Protocol) lets your agent pay for many API requests using a single on-chain deposit — then settle the entire session with one closing transaction. Instead of broadcasting a Stellar transaction for every request, your agent makes cryptographically-signed off-chain commitments that accumulate over the session. Only the open and close steps touch the chain. This keeps fees negligible and throughput high when your agent needs to call a paid endpoint many times in quick succession.
+
+## When to use MPP vs x402
+
+| | x402 | MPP |
+|---|---|---|
+| **Best for** | Occasional, one-off paid API calls | High-frequency or streaming micropayments |
+| **On-chain transactions** | One per request | Two total (open + close) |
+| **Setup required** | None | Open a channel first |
+| **Per-request cost** | Full Stellar transaction fee | Near zero (off-chain commitments) |
+| **Settling** | Automatic per call | Explicit `mpp_close_session` |
+| **Spending limit check** | Per call | On open (full budget) |
+
+Use `x402_fetch` when you need to call a paid API once or occasionally. Switch to MPP when you expect to make many requests to the same endpoint in a session — the cost and latency savings are significant.
+
+## Starting an MPP session
+
+<Steps>
+  <Step title="Open a session with a USDC budget">
+    Tell your agent to open a payment channel with a total budget in USDC. All funds are deposited on-chain at this step and reserved against your spending limits.
+
+    ```text
+    Use mpp_open_session from Nebula with budget 5
+    ```
+
+    You can also specify a recipient address directly if you are not using the `MPP_RECIPIENT` env var:
+
+    ```text
+    Use mpp_open_session from Nebula with budget 5 recipient GABCDEF...
+    ```
+
+    Nebula deploys a one-way payment channel Soroban contract and deposits your budget. The tool returns the channel contract address and session details.
+
+    <Note>
+      The full `budget` amount is checked against your `MAX_PER_CALL` and `MAX_PER_DAY` limits when the session opens. Individual `mpp_fetch` calls within the session are **not** separate spending-limit checks — they draw down the pre-approved budget.
+    </Note>
+  </Step>
+  <Step title="Make requests against the channel">
+    Once a session is open, use `mpp_fetch` to call any MPP-gated URL. Each call signs a cumulative off-chain commitment — no per-request on-chain transaction is broadcast.
+
+    ```text
+    Use mpp_fetch from Nebula with url https://api.example.com/stream
+    ```
+
+    You can call this as many times as needed. Nebula rejects any request that would push the cumulative commitment over the session budget.
+  </Step>
+  <Step title="Check session status">
+    At any point during the session, inspect the channel balance to see how much of your budget you have committed and how much remains:
+
+    ```text
+    Use mpp_status from Nebula
+    ```
+
+    The response shows the channel contract address, total budget, committed spend so far, and remaining balance.
+  </Step>
+  <Step title="Close the session and settle on-chain">
+    When you are done, close the session to trigger on-chain settlement:
+
+    ```text
+    Use mpp_close_session from Nebula
+    ```
+
+    Nebula submits a single closing transaction that pays the recipient the committed USDC amount and refunds the unused portion of the deposit back to your wallet.
+  </Step>
+</Steps>
+
+## What happens when you close
+
+`mpp_close_session` broadcasts a `close()` call to the channel contract on Stellar. The contract:
+
+1. Verifies the final cumulative commitment signed by your agent.
+2. Transfers the committed USDC to the recipient.
+3. Refunds any remaining deposit to your funding wallet.
+
+After closing, the session is cleared and you can open a new one.
+
+<Warning>
+  Always call `mpp_close_session` when you are finished with a session. If you leave a session open indefinitely, your deposit remains locked in the channel contract. Unclosed sessions also block you from opening a new session — only one MPP session can be active at a time.
+</Warning>
+
+## Configuring a default recipient
+
+If you frequently pay the same recipient, set `MPP_RECIPIENT` in your MCP config so you do not need to pass it every time:
+
+```json
+"MPP_RECIPIENT": "GABCDEFGHIJKLMNOPQRSTUVWXYZ..."
+```
+
+When `MPP_RECIPIENT` is set, `mpp_open_session` uses it automatically unless you supply a `recipient` argument explicitly.
+
+## Spending limits and MPP
+
+The budget you pass to `mpp_open_session` is the only step subject to your spending caps. The full budget amount counts against both `MAX_PER_CALL` and the rolling `MAX_PER_DAY` window at the moment the channel opens. After that, individual `mpp_fetch` calls are purely off-chain and do not trigger additional limit checks.
+
+This means you should size your budget carefully:
+
+- **Too small** — you may exhaust the session budget mid-workflow and need to open a new channel.
+- **Too large** — you lock up more USDC in the channel than needed (unused funds are refunded on close, but they are unavailable until then).
+
+<Tip>
+  Use `mpp_status` during long sessions to monitor remaining budget and decide whether to close and reopen with a larger allocation before it runs out.
+</Tip>
+
+<CardGroup cols={2}>
+  <Card title="x402 Payments" icon="credit-card" href="/guides/x402-payments">
+    Pay per-request with x402 when you only need occasional API calls.
+  </Card>
+  <Card title="On-Chain Policy" icon="shield" href="/guides/on-chain-policy">
+    Lock in spending caps with a Soroban contract so limits cannot be bypassed.
+  </Card>
+</CardGroup>

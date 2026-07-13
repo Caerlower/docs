@@ -1,0 +1,97 @@
+---
+title: "How the Nebula Agent Wallet Works on Stellar Network"
+sidebarTitle: "Wallet"
+description: "Nebula gives your AI agent a real Stellar account holding XLM and USDC, with full balance visibility and direct transfers — no human required."
+---
+
+Your Nebula agent operates a genuine Stellar account — not a simulated balance or a custodial wrapper. The private key lives in your MCP environment, and every transaction is signed and submitted directly to the Stellar network. Your agent can check balances, send payments, and receive funds exactly the way a human wallet holder would, but entirely without manual intervention.
+
+## What your wallet holds
+
+Nebula wallets hold two assets natively on Stellar:
+
+| Asset | Type | Purpose |
+|-------|------|---------|
+| **XLM** | Stellar native token | Network fees, minimum account reserve, and direct XLM transfers |
+| **USDC** | Circle stablecoin via trustline | Stablecoin payments, x402 API pay-walls, MPP session funding |
+
+XLM is the lifeblood of every Stellar account — it covers transaction fees (a fraction of a cent) and the minimum balance reserve your account must hold. USDC is brought in through a Circle trustline, turning your agent's wallet into a stablecoin-capable payment endpoint.
+
+## Wallet tools
+
+These tools give your agent complete visibility and control over the wallet itself:
+
+| Tool | What it does |
+|------|-------------|
+| `get_address` | Returns the wallet public key (`G...`) — useful for sharing a receive address |
+| `check_balance` | Fetches current XLM and USDC balances from the Stellar network |
+| `wallet_dashboard` | Opens an interactive in-chat UI showing balances, spending limits, treasury status, and identity |
+| `request_funding` | Returns a Friendbot link (testnet) or funding instructions (mainnet) |
+
+## Transfers
+
+Your agent sends funds using two dedicated transfer tools:
+
+| Tool | Parameters | Notes |
+|------|-----------|-------|
+| `transfer_xlm` | `destination` (G...), `amount` | Sends XLM; subject to spending limits |
+| `transfer_usdc` | `destination` (G...), `amount` | Sends USDC; requires an active trustline; subject to spending limits |
+
+Both tools check your configured spending limits before signing. If the amount would exceed your per-call cap or rolling 24-hour daily cap, the transfer is blocked before any funds leave the wallet. See [Spending Policy](/concepts/spending-policy) for details.
+
+## Trustlines
+
+Stellar requires you to explicitly opt in to holding any non-native asset by establishing a **trustline**. Your agent cannot hold or receive USDC until the trustline to Circle's USDC issuer is in place.
+
+On testnet, add the USDC trustline and receive test funds from the [Circle testnet faucet](https://faucet.circle.com/). On mainnet, you must explicitly establish the trustline to Circle's mainnet USDC issuer before the wallet can hold or receive USDC — Stellar requires account holders to opt in to every non-native asset before any balance can be received.
+
+<Note>
+  Without a USDC trustline, `transfer_usdc`, `x402_fetch`, and `mpp_open_session` will fail. Set up the trustline before your agent attempts any USDC-denominated action.
+</Note>
+
+## Getting started
+
+<Tip>
+  Always begin on testnet. You can experiment freely without real funds, and the Circle faucet gives you test USDC instantly.
+</Tip>
+
+1. Add `STELLAR_SECRET_KEY` and `NETWORK=testnet` to your MCP environment.
+2. Ask your agent to call `request_funding` — it returns a Friendbot link that seeds the account with XLM.
+3. Visit the [Circle testnet faucet](https://faucet.circle.com/) with your wallet's `get_address` output to add a USDC trustline and receive test USDC.
+4. Confirm everything is in order with `check_balance` or `wallet_dashboard`.
+
+```json title="Minimal MCP config"
+{
+  "mcpServers": {
+    "nebula": {
+      "command": "npx",
+      "args": ["-y", "nebula-mcp"],
+      "env": {
+        "STELLAR_SECRET_KEY": "S...",
+        "NETWORK": "testnet",
+        "MAX_PER_CALL": "10",
+        "MAX_PER_DAY": "100"
+      }
+    }
+  }
+}
+```
+
+## Interactive dashboard
+
+The `wallet_dashboard` tool renders a live, interactive UI inside Claude Desktop and other MCP-compatible chat interfaces. It surfaces balances, spending limits, treasury yield status, open MPP session details, and your Stellar8004 identity — all in a single in-chat widget with no context switching required.
+
+<CardGroup cols={2}>
+  <Card title="Spending Policy" icon="shield-halved" href="/concepts/spending-policy">
+    Keep your agent's payments bounded with per-call and daily caps
+  </Card>
+  <Card title="Payments" icon="bolt" href="/concepts/payments">
+    Pay for APIs automatically using x402 and MPP protocols
+  </Card>
+  <Card title="Treasury" icon="piggy-bank" href="/concepts/treasury">
+    Put idle wallet funds to work earning yield on Blend
+  </Card>
+  <Card title="Identity" icon="fingerprint" href="/concepts/identity">
+    Give your agent a verifiable on-chain identity and reputation
+  </Card>
+</CardGroup>

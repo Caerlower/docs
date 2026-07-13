@@ -1,0 +1,184 @@
+---
+title: "Nebula MCP Environment Variable Configuration Guide"
+sidebarTitle: "Configuration"
+description: "All environment variables for Nebula MCP — wallet keys, network selection, spending limits, treasury settings, and agent identity metadata."
+---
+
+Nebula is configured entirely through environment variables passed in the `env` block of your MCP server config — no config files, no CLI flags. Every capability (wallet, spending policy, treasury, identity) has corresponding variables you can tune without changing code. This page documents all available variables, their defaults, and when to use them.
+
+## Required variables
+
+<ParamField path="STELLAR_SECRET_KEY" type="string" required>
+  The Stellar secret key for your agent's wallet. Must start with `S` and be 56 characters long. This key controls all funds held by the wallet — keep it secret and never commit it to version control.
+
+  Generate a new keypair at [laboratory.stellar.org](https://laboratory.stellar.org) under **Account Creator**.
+</ParamField>
+
+## Network
+
+<ParamField path="NETWORK" type="string" default="testnet">
+  Which Stellar network to connect to. Accepted values: `testnet` or `mainnet`.
+
+  On `testnet`, Friendbot is available for free XLM funding and all contracts use testnet deployments. Set to `mainnet` only when you are ready for production with real funds.
+</ParamField>
+
+<Warning>
+Switching from `testnet` to `mainnet` means your agent will use real XLM and real USDC. Double-check your spending limits before going live on mainnet.
+</Warning>
+
+## Spending limits
+
+Nebula enforces limits before signing any transfer, x402 payment, or MPP session open. You can enforce limits off-chain (via environment variables) or on-chain (via a Soroban smart contract). Treasury rebalancing is **never** subject to spending limits.
+
+<ParamField path="MAX_PER_CALL" type="number">
+  Maximum amount (in stroops for XLM, or USDC base units) your agent can spend in a single transfer, `x402_fetch`, or `mpp_open_session` call. Required when `POLICY_CONTRACT_ID` is not set.
+
+  Example: `"1000"` caps each individual payment at 1,000 units.
+</ParamField>
+
+<ParamField path="MAX_PER_DAY" type="number">
+  Rolling 24-hour spending cap across all outgoing payments. Required when `POLICY_CONTRACT_ID` is not set.
+
+  Example: `"10000"` allows up to 10,000 units of total outgoing spend in any 24-hour window.
+</ParamField>
+
+<ParamField path="POLICY_CONTRACT_ID" type="string">
+  The address (`C...`) of a deployed `nebula-policy` Soroban contract. When set, all spending limits are enforced on-chain by the contract — `MAX_PER_CALL` and `MAX_PER_DAY` env vars are ignored for enforcement purposes.
+
+  Deploy a new policy contract from chat using:
+  ```text
+  Use deploy_policy from Nebula
+  ```
+  Copy the returned contract address into this variable and restart Claude.
+</ParamField>
+
+<ParamField path="POLICY_WASM_PATH" type="string">
+  Path to a custom `policy.wasm` binary to use when deploying the `nebula-policy` contract with `deploy_policy`. Leave unset to use the WASM bundled inside the npm package — this is the right choice for almost all users.
+
+  Only set this if you have compiled a custom fork of the policy contract and want to deploy that version instead.
+</ParamField>
+
+<Note>
+When `POLICY_CONTRACT_ID` is set, your agent's spending limits are enforced by the Stellar blockchain itself — not a config file. The chain rejects overspend. Use `set_policy_limits` to update caps without redeploying.
+</Note>
+
+## Treasury
+
+The treasury engine runs a background rebalancer that deposits excess funds into Blend lending pools for yield and withdraws them automatically when your liquid balance drops below the threshold.
+
+<ParamField path="TREASURY_ASSET" type="string" default="xlm">
+  Which asset the treasury engine manages. Accepted values: `xlm` or `usdc`.
+
+  When set to `xlm`, Nebula manages your XLM balance in Blend (keeping `XLM_FEE_BUFFER` liquid for fees). When set to `usdc`, Nebula manages your USDC balance.
+</ParamField>
+
+<ParamField path="LIQUIDITY_THRESHOLD" type="number" default="10">
+  Minimum liquid balance (in the treasury asset) to keep on hand at all times. Any balance above this threshold is automatically deposited into Blend to earn yield. When your liquid balance drops below this threshold, Blend withdraws funds to top it back up.
+
+  Example: `"10"` keeps 10 XLM (or USDC) liquid and deposits the rest.
+</ParamField>
+
+<ParamField path="REBALANCE_INTERVAL_SECONDS" type="number" default="60">
+  How often (in seconds) the background treasury loop runs to check and rebalance your position. Lower values react faster to balance changes; higher values reduce Stellar transaction frequency.
+</ParamField>
+
+<ParamField path="XLM_FEE_BUFFER" type="number" default="5">
+  XLM amount reserved exclusively for transaction fees when `TREASURY_ASSET=xlm`. This buffer is excluded from treasury rebalancing — your agent always keeps at least this much XLM liquid to pay fees.
+</ParamField>
+
+<ParamField path="TREASURY_MAX_PER_REBALANCE" type="number">
+  Optional cap on the amount moved in a single treasury rebalance transaction. Leave unset (or set to `0`) to move the full excess or deficit in one transaction. Useful if you want to limit the size of individual Blend interactions.
+</ParamField>
+
+## MPP sessions
+
+<ParamField path="MPP_RECIPIENT" type="string">
+  Default recipient address (`G...`) for MPP payment channel payouts. When set, `mpp_open_session` uses this address automatically — your agent doesn't need to specify a recipient each time.
+
+  Can be overridden per-call by passing `recipient` directly to `mpp_open_session`.
+</ParamField>
+
+<ParamField path="MPP_CHANNEL_WASM_PATH" type="string">
+  Path to a custom `channel.wasm` binary to use when deploying an MPP payment channel contract via `mpp_open_session`. Leave unset to use the WASM bundled inside the npm package — the right choice for almost all users.
+
+  Only set this if you have compiled a custom fork of the channel contract.
+</ParamField>
+
+## Agent identity (Stellar8004)
+
+These variables pre-populate the metadata for your agent's on-chain identity when you call `register_identity`. All are optional — identity registration works without them, but setting them makes your agent's profile more useful to services that read on-chain reputation.
+
+<ParamField path="AGENT8004_NAME" type="string">
+  Human-readable display name for your agent's on-chain identity. Example: `"My Research Agent"`.
+</ParamField>
+
+<ParamField path="AGENT8004_DESCRIPTION" type="string">
+  Short description of what your agent does. Shown in reputation lookups by other agents and services.
+</ParamField>
+
+<ParamField path="AGENT8004_IMAGE_URL" type="string">
+  URL to an avatar or logo image for your agent's on-chain profile.
+</ParamField>
+
+## Complete configuration example
+
+The following shows every variable in a single MCP config block. Copy it, remove what you don't need, and fill in your values.
+
+```json mcp-config.json
+{
+  "mcpServers": {
+    "nebula": {
+      "command": "npx",
+      "args": ["-y", "nebula-mcp"],
+      "env": {
+        "STELLAR_SECRET_KEY": "YOUR_STELLAR_SECRET_KEY",
+
+        "NETWORK": "testnet",
+
+        "MAX_PER_CALL": "1000",
+        "MAX_PER_DAY": "10000",
+        "POLICY_CONTRACT_ID": "",
+        "POLICY_WASM_PATH": "",
+
+        "TREASURY_ASSET": "xlm",
+        "LIQUIDITY_THRESHOLD": "10",
+        "REBALANCE_INTERVAL_SECONDS": "60",
+        "XLM_FEE_BUFFER": "5",
+        "TREASURY_MAX_PER_REBALANCE": "",
+
+        "MPP_RECIPIENT": "",
+        "MPP_CHANNEL_WASM_PATH": "",
+
+        "AGENT8004_NAME": "",
+        "AGENT8004_DESCRIPTION": "",
+        "AGENT8004_IMAGE_URL": ""
+      }
+    }
+  }
+}
+```
+
+<Note>
+`POLICY_CONTRACT_ID` overrides off-chain `MAX_PER_CALL` and `MAX_PER_DAY` for enforcement. When a contract address is present, set your limits on-chain using `set_policy_limits` — changes to `MAX_PER_CALL` and `MAX_PER_DAY` in the env block will have no effect on what the blockchain allows.
+</Note>
+
+## Variable summary
+
+| Variable | Required | Default | Purpose |
+|---|---|---|---|
+| `STELLAR_SECRET_KEY` | **Yes** | — | Wallet secret key (`S...`) |
+| `NETWORK` | No | `testnet` | `testnet` or `mainnet` |
+| `MAX_PER_CALL` | Off-chain mode | — | Per-payment spend cap |
+| `MAX_PER_DAY` | Off-chain mode | — | Rolling 24h spend cap |
+| `POLICY_CONTRACT_ID` | No | — | On-chain Soroban policy (`C...`) |
+| `POLICY_WASM_PATH` | No | bundled | Custom policy WASM path (advanced) |
+| `TREASURY_ASSET` | No | `xlm` | Asset managed by treasury engine |
+| `LIQUIDITY_THRESHOLD` | No | `10` | Min liquid balance before depositing to Blend |
+| `REBALANCE_INTERVAL_SECONDS` | No | `60` | Background treasury loop interval |
+| `XLM_FEE_BUFFER` | No | `5` | XLM reserved for fees |
+| `TREASURY_MAX_PER_REBALANCE` | No | — | Cap per single treasury move |
+| `MPP_RECIPIENT` | MPP | — | Default channel payout address |
+| `MPP_CHANNEL_WASM_PATH` | No | bundled | Custom channel WASM path (advanced) |
+| `AGENT8004_NAME` | No | — | Agent display name for on-chain identity |
+| `AGENT8004_DESCRIPTION` | No | — | Agent description for on-chain profile |
+| `AGENT8004_IMAGE_URL` | No | — | Agent avatar URL for on-chain profile |

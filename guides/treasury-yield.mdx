@@ -1,0 +1,149 @@
+---
+title: "Auto-Earn Yield on Idle Funds with Nebula Treasury"
+sidebarTitle: "Treasury & Yield"
+description: "Configure Nebula's automated treasury to deposit idle funds into Blend lending pools and earn yield while your agent stays fully funded."
+---
+
+Every wallet has funds sitting idle between operations. Nebula's treasury module puts that idle balance to work by automatically depositing excess funds into [Blend](https://blend.capital/) — a decentralized lending protocol on Stellar — and withdrawing back to your wallet whenever your liquid balance drops below a threshold you define. Your agent stays funded for payments while the surplus earns supply APY in the background, with no manual intervention required.
+
+## How the treasury works
+
+Nebula runs a background rebalancing loop on a configurable interval (default: every 60 seconds). On each tick it compares your current liquid balance against your liquidity threshold and acts accordingly:
+
+- **Liquid balance above threshold** — the excess is deposited into the Blend lending pool to earn yield.
+- **Liquid balance below threshold** — Blend deposits are withdrawn to top up your liquid balance back to the threshold.
+- **Liquid balance at threshold** — no action is taken.
+
+The treasury asset is configured via `TREASURY_ASSET` and can be either `xlm` (default) or `usdc`. When you use XLM as the treasury asset, Nebula automatically reserves a small buffer (`XLM_FEE_BUFFER`) in your liquid balance so you always have enough XLM to pay Stellar transaction fees.
+
+<Note>
+  Treasury rebalancing moves are **not** subject to your agent spending limits (`MAX_PER_CALL`, `MAX_PER_DAY`, or your on-chain policy). The rebalancer manages your funds on your behalf and operates outside the spending control layer.
+</Note>
+
+## Setting up the treasury
+
+<Steps>
+  <Step title="Check your current treasury status">
+    Start by looking at what the treasury sees right now — your liquid balance, any existing Blend deposits, the current supply APY, and when the last rebalance ran:
+
+    ```text
+    Use get_treasury_status from Nebula
+    ```
+
+    Example output:
+    ```text
+    Treasury status  [testnet]
+    Pool:              TestnetV2
+    Asset:             XLM
+
+    Balances
+    Liquid XLM:        45.23  (treasury-usable)
+    Native XLM total:  50.23
+    XLM fee buffer:    5.00
+    Deposited in Blend: 0.00
+    Blend supply APY:  4.82%
+
+    Rebalancer
+    Liquidity threshold: 10.00 XLM
+    Rebalance interval:  60s
+
+    Last rebalance
+    Status: none yet
+    ```
+  </Step>
+  <Step title="Check current Blend rates">
+    Before adjusting your threshold, review the current supply APY available in the Blend lending pool for your treasury asset:
+
+    ```text
+    Use blend_check_rates from Nebula
+    ```
+
+    <Note>
+      `blend_check_rates` reads Blend pool data on testnet. Verify pool availability and rates separately before deploying to mainnet — pool compositions and APYs differ between networks.
+    </Note>
+  </Step>
+  <Step title="Set your liquidity threshold">
+    Choose how much of your treasury asset to keep liquid and immediately available for agent payments. Anything above this amount will be automatically deposited into Blend:
+
+    ```text
+    Use set_liquidity_threshold from Nebula with threshold 20
+    ```
+
+    This sets a minimum liquid balance of 20 units of your treasury asset. The background rebalancer picks up the new value on its next run.
+
+    <Tip>
+      Set your threshold high enough to cover a typical burst of agent spending without triggering a withdrawal mid-session. A good starting point is two to three times your `MAX_PER_DAY` cap expressed in your treasury asset.
+    </Tip>
+  </Step>
+  <Step title="Trigger an immediate rebalance">
+    You do not need to wait for the next background tick. Trigger a rebalance right now to deposit any excess immediately:
+
+    ```text
+    Use optimize_treasury from Nebula
+    ```
+
+    Nebula calculates the difference between your current liquid balance and your threshold, then either deposits the excess to Blend or withdraws from Blend to cover a shortfall — whichever is needed.
+  </Step>
+</Steps>
+
+## Configuration reference
+
+Set these environment variables in your MCP config to control treasury behaviour:
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `TREASURY_ASSET` | `xlm` | Asset to manage: `xlm` or `usdc`. |
+| `LIQUIDITY_THRESHOLD` | `10` | Minimum liquid balance to keep on hand before depositing excess to Blend. |
+| `REBALANCE_INTERVAL_SECONDS` | `60` | How often the background loop checks and rebalances (in seconds). |
+| `XLM_FEE_BUFFER` | `5` | XLM reserved for transaction fees when `TREASURY_ASSET=xlm`. This amount is always kept liquid and is not deposited. |
+| `TREASURY_MAX_PER_REBALANCE` | _(unset)_ | Optional cap on how much can be moved in a single rebalance. Leave unset to move the full excess or deficit in one transaction. |
+
+<Tip>
+  Always set `XLM_FEE_BUFFER` when `TREASURY_ASSET=xlm`. Without it, the rebalancer could deposit so much XLM that your wallet cannot pay transaction fees — which would cause all subsequent operations to fail until a withdrawal is triggered.
+</Tip>
+
+## Example MCP config with treasury
+
+```json
+{
+  "mcpServers": {
+    "nebula": {
+      "command": "npx",
+      "args": ["-y", "nebula-mcp"],
+      "env": {
+        "STELLAR_SECRET_KEY": "S...",
+        "NETWORK": "testnet",
+        "TREASURY_ASSET": "xlm",
+        "LIQUIDITY_THRESHOLD": "20",
+        "REBALANCE_INTERVAL_SECONDS": "60",
+        "XLM_FEE_BUFFER": "5",
+        "MAX_PER_CALL": "1000",
+        "MAX_PER_DAY": "10000"
+      }
+    }
+  }
+}
+```
+
+## Monitoring the treasury
+
+After your first few rebalancing cycles, run `get_treasury_status` again to confirm funds are moving as expected:
+
+```text
+Use get_treasury_status from Nebula
+```
+
+The output includes the last rebalance action (deposit or withdraw), the amount moved, the timestamp, and the on-chain transaction hash. If a rebalance failed, the error message appears under "Treasury error".
+
+<Warning>
+  Blend pool availability and APY rates vary and can change over time. Always verify that the testnet Blend pool you are using has sufficient liquidity before relying on it in production. On mainnet, confirm pool availability separately — testnet and mainnet pools are independent.
+</Warning>
+
+<CardGroup cols={2}>
+  <Card title="Connect to Claude" icon="plug" href="/guides/connect-claude">
+    Configure your MCP environment variables from scratch.
+  </Card>
+  <Card title="On-Chain Policy" icon="shield" href="/guides/on-chain-policy">
+    Add cryptographic spending enforcement alongside your treasury setup.
+  </Card>
+</CardGroup>

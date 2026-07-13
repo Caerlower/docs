@@ -1,0 +1,92 @@
+{
+  "projectType": "sdk-library",
+  "projectName": "Nebula",
+  "projectDescription": "An MCP server that gives any AI agent a real Stellar wallet — with automated payments, on-chain spending policy, yield-earning treasury, and verifiable agent identity.",
+  "theme": "luma",
+  "primaryColor": "#8E6BFF",
+  "lightColor": "#3ECFC1",
+  "darkColor": "#0A0912",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Get Started",
+            "pages": [
+              "introduction",
+              "quickstart",
+              "configuration"
+            ]
+          },
+          {
+            "group": "Core Concepts",
+            "pages": [
+              "concepts/wallet",
+              "concepts/spending-policy",
+              "concepts/treasury",
+              "concepts/payments",
+              "concepts/identity"
+            ]
+          },
+          {
+            "group": "Guides",
+            "pages": [
+              "guides/connect-claude",
+              "guides/x402-payments",
+              "guides/mpp-sessions",
+              "guides/on-chain-policy",
+              "guides/treasury-yield"
+            ]
+          },
+          {
+            "group": "Reference",
+            "pages": [
+              "reference/tools",
+              "reference/environment-variables",
+              "reference/networks",
+              "reference/spending-limits"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "One-line npx install — no build step required",
+    "Real Stellar wallet for any MCP-compatible AI agent",
+    "x402 per-request USDC payments for HTTP APIs",
+    "MPP streaming micropayment sessions",
+    "On-chain spending policy enforced by Soroban smart contracts",
+    "Automated treasury yield via Blend lending pools",
+    "Stellar8004 on-chain agent identity and reputation",
+    "Interactive in-chat wallet dashboard",
+    "Works with Claude Desktop, Claude Code, and any MCP agent framework",
+    "23 tools covering wallet, transfers, payments, treasury, and identity"
+  ],
+  "publicApiSurface": [
+    "ping",
+    "help",
+    "get_address",
+    "check_balance",
+    "wallet_dashboard",
+    "request_funding",
+    "transfer_xlm",
+    "transfer_usdc",
+    "spending_report",
+    "deploy_policy",
+    "get_policy_status",
+    "set_policy_limits",
+    "x402_fetch",
+    "mpp_open_session",
+    "mpp_status",
+    "mpp_fetch",
+    "mpp_close_session",
+    "get_treasury_status",
+    "set_liquidity_threshold",
+    "optimize_treasury",
+    "blend_check_rates",
+    "register_identity",
+    "get_my_reputation"
+  ]
+}

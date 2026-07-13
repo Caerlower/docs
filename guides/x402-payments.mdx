@@ -1,0 +1,126 @@
+---
+title: "Automate Per-Request USDC Payments with x402_fetch"
+sidebarTitle: "x402 Payments"
+description: "Use Nebula's x402_fetch tool to automatically pay HTTP 402 APIs with USDC — your agent handles the payment and retries without human intervention."
+---
+
+The x402 protocol lets HTTP APIs charge per request using a standard `402 Payment Required` response. Instead of API keys or subscription plans, each call costs a small USDC amount, paid on Stellar. Nebula's `x402_fetch` tool handles the entire payment cycle autonomously — your agent calls a URL, Nebula detects any payment requirement, signs and submits the USDC payment, and retries the request with proof of payment attached. No human approval needed between steps.
+
+## How x402 works
+
+When your agent calls `x402_fetch`, Nebula follows this sequence:
+
+<Steps>
+  <Step title="Send the initial request">
+    Nebula makes a standard HTTP GET request to the URL you provide.
+  </Step>
+  <Step title="Receive payment terms">
+    If the server requires payment, it responds with `HTTP 402` and a machine-readable payload describing the required amount, asset (USDC), and payment address.
+  </Step>
+  <Step title="Sign and submit the payment">
+    Nebula checks your configured spending limit, then signs and broadcasts a USDC payment on Stellar. This step is subject to your `MAX_PER_CALL` cap — if the payment amount exceeds the cap, the tool returns an error instead of paying.
+  </Step>
+  <Step title="Retry with payment proof">
+    Nebula retries the original request with a signed payment header attached, proving the payment was made.
+  </Step>
+  <Step title="Return the response">
+    The server validates the proof and returns the response body. Nebula passes the content back to your agent.
+  </Step>
+</Steps>
+
+## Making an x402 payment
+
+Tell your agent to call `x402_fetch` with the target URL:
+
+```text
+Use x402_fetch from Nebula with url https://api.example.com/data
+```
+
+Your agent can also call the tool directly in a workflow without a manual prompt. The tool takes a single `url` parameter and handles everything else automatically.
+
+<Note>
+  `x402_fetch` always uses GET. If the API you are calling requires a different method, check the API's documentation — some x402-gated APIs provide separate endpoints for paid data retrieval.
+</Note>
+
+## Spending limits
+
+Every `x402_fetch` payment is checked against your spending caps **before** the payment is signed:
+
+- **`MAX_PER_CALL`** — the maximum USDC your agent can spend in a single call. Set this to at least the highest payment amount you expect to encounter.
+- **`MAX_PER_DAY`** — the rolling 24-hour cap across all agent payments. x402 payments count toward this total alongside transfers and MPP session budgets.
+
+If you have deployed an on-chain policy contract (`POLICY_CONTRACT_ID`), those limits take precedence over the env var values. See the [On-Chain Policy guide](/guides/on-chain-policy) for details.
+
+<Warning>
+  If `MAX_PER_CALL` is lower than the API's required payment amount, `x402_fetch` will return an error and **not** make the payment. Raise `MAX_PER_CALL` in your MCP config and restart Claude before retrying.
+</Warning>
+
+## Prerequisites
+
+`x402_fetch` pays APIs using USDC on Stellar. Before your first payment you need:
+
+1. **A USDC trustline on your wallet** — your Stellar account must opt in to hold USDC before it can receive or spend it.
+2. **A funded USDC balance** — the payment amount is deducted from your wallet's USDC balance at the time of the call.
+3. **Enough XLM for fees** — Stellar transactions require a small XLM fee (a fraction of a cent). Your wallet always needs a small XLM reserve.
+
+## Setup checklist
+
+<Steps>
+  <Step title="Fund your XLM balance">
+    On testnet, ask your agent to request testnet tokens:
+
+    ```text
+    Use request_funding from Nebula
+    ```
+
+    Nebula returns a Friendbot link that credits your wallet with test XLM. On mainnet, fund your wallet through an exchange or a Stellar-compatible wallet app.
+  </Step>
+  <Step title="Add a USDC trustline and get test USDC">
+    Go to the [Circle testnet faucet](https://faucet.circle.com/) and request test USDC for your wallet's public address. The faucet also establishes the trustline automatically.
+
+    To find your public address:
+
+    ```text
+    Use get_address from Nebula
+    ```
+  </Step>
+  <Step title="Set MAX_PER_CALL high enough">
+    Open your MCP config and set `MAX_PER_CALL` to a value that covers the maximum payment you expect to make in one call. For example, if you expect APIs to charge up to `0.10` USDC per request, set:
+
+    ```json
+    "MAX_PER_CALL": "1"
+    ```
+
+    Give yourself a comfortable margin — you can always lower the cap later. Restart Claude after changing the config.
+  </Step>
+  <Step title="Verify your balance">
+    Confirm your USDC balance before making your first x402 call:
+
+    ```text
+    Use check_balance from Nebula
+    ```
+  </Step>
+</Steps>
+
+<Warning>
+  Make sure your USDC balance is sufficient to cover the expected payments plus any transaction fees. `x402_fetch` will fail immediately if the required payment exceeds your wallet's available USDC balance.
+</Warning>
+
+## Checking your spending history
+
+After making x402 payments, you can review cumulative spend against your daily cap:
+
+```text
+Use spending_report from Nebula
+```
+
+This shows your per-call cap, daily cap, amount spent in the rolling 24-hour window, and remaining budget.
+
+<CardGroup cols={2}>
+  <Card title="MPP Sessions" icon="bolt" href="/guides/mpp-sessions">
+    For high-frequency micropayments, open an MPP channel instead of paying per-request with x402.
+  </Card>
+  <Card title="On-Chain Policy" icon="shield" href="/guides/on-chain-policy">
+    Enforce spending caps with a Soroban contract rather than environment variables.
+  </Card>
+</CardGroup>

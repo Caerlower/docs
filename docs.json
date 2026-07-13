@@ -1,0 +1,63 @@
+{
+  "$schema": "https://mintlify.com/docs.json",
+  "name": "Nebula",
+  "theme": "luma",
+  "colors": {
+    "primary": "#8E6BFF",
+    "light": "#3ECFC1",
+    "dark": "#0A0912"
+  },
+  "favicon": "/favicon.svg",
+  "navbar": {
+    "primary": {
+      "type": "github",
+      "href": "https://github.com/Caerlower/Nebula"
+    }
+  },
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Get Started",
+            "pages": [
+              "introduction",
+              "quickstart",
+              "configuration"
+            ]
+          },
+          {
+            "group": "Core Concepts",
+            "pages": [
+              "concepts/wallet",
+              "concepts/spending-policy",
+              "concepts/treasury",
+              "concepts/payments",
+              "concepts/identity"
+            ]
+          },
+          {
+            "group": "Guides",
+            "pages": [
+              "guides/connect-claude",
+              "guides/x402-payments",
+              "guides/mpp-sessions",
+              "guides/on-chain-policy",
+              "guides/treasury-yield"
+            ]
+          },
+          {
+            "group": "Reference",
+            "pages": [
+              "reference/tools",
+              "reference/environment-variables",
+              "reference/networks",
+              "reference/spending-limits"
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}

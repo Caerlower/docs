@@ -1,0 +1,134 @@
+---
+title: "x402 and MPP: Machine-to-Machine Payments for Agents"
+sidebarTitle: "Payments"
+description: "Nebula supports two payment protocols: x402 for per-request USDC payments and MPP for streaming micropayments settled in a single on-chain transaction."
+---
+
+Nebula gives your agent two distinct ways to pay for API access and digital resources: **x402** for automatic per-request payments against any HTTP endpoint that charges for access, and **MPP** (Micropayment Protocol) for high-frequency or streaming access where batching many micro-charges into a single on-chain settlement dramatically reduces friction and cost. Both protocols use USDC, both respect your spending limits, and neither requires a human to approve individual payments.
+
+---
+
+## x402 payments
+
+### What x402 is
+
+x402 is an HTTP payment protocol built around the long-reserved [402 Payment Required](https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/402) status code. When an API server charges for access, it returns a `402` response containing machine-readable payment terms. A compliant client — like Nebula — reads those terms, signs a USDC payment on Stellar, and retries the original request with a payment proof header. The server verifies the payment and returns the resource.
+
+The entire flow is automatic. Your agent calls `x402_fetch` with a URL; Nebula handles negotiation, signing, and retry transparently.
+
+### x402 payment flow
+
+```
+Agent calls x402_fetch(url)
+         │
+         ▼
+  GET url ──────────────────► API server
+                                    │
+                ◄────────────────── 402 + payment terms (amount, recipient, asset)
+         │
+         ▼
+  Check spending limits
+         │
+         ▼
+  Sign USDC payment on Stellar
+         │
+         ▼
+  GET url + X-Payment header ► API server
+                                    │
+                ◄────────────────── 200 + response body
+         │
+         ▼
+  Return response to agent
+```
+
+### x402 tool
+
+| Tool | Parameters | What it does |
+|------|-----------|-------------|
+| `x402_fetch` | `url` | GETs a URL. If a `402` response is received, pays USDC automatically and retries. Subject to spending limits. |
+
+### When to use x402
+
+x402 is the right choice when you need **one-off access** to a resource or when the service charges per request with no concept of a session. Common use cases include paying for AI inference calls, data feeds, search APIs, and any other HTTP-gated resource where the provider has implemented x402.
+
+```
+Use x402_fetch from Nebula with url https://api.example.com/data
+```
+
+---
+
+## MPP sessions (Micropayment Protocol)
+
+### What MPP is
+
+MPP opens a **one-way payment channel** between your agent and a recipient. You deposit a USDC budget on-chain once — deploying a Soroban channel contract — and then make as many individual `mpp_fetch` calls as you need, each using off-chain cryptographic commitments. No per-fetch on-chain transaction is required. When the session is done, a single `mpp_close_session` call settles the accumulated commitments on-chain, pays the recipient their earned amount, and refunds any unused budget to your wallet.
+
+### Why MPP
+
+A busy agent might make dozens or hundreds of small API calls in a short window. Submitting a Stellar transaction for each one would be slow and expensive. With MPP, only two on-chain transactions occur — `open` and `close` — regardless of how many fetches happen in between. The channel contract on Soroban guarantees the recipient gets paid correctly at settlement; commitments are cryptographically signed so they cannot be repudiated.
+
+### MPP session flow
+
+```
+mpp_open_session(budget, recipient)
+  └─ Deploys channel contract + deposits budget on-chain (1 tx)
+         │
+         ▼
+mpp_fetch(url) ──► off-chain commitment signed ──► provider serves response
+mpp_fetch(url) ──► off-chain commitment signed ──► provider serves response
+mpp_fetch(url) ──► off-chain commitment signed ──► provider serves response
+  (repeat as needed — no on-chain txs)
+         │
+         ▼
+mpp_close_session()
+  └─ Settles on-chain: pays recipient earned amount, refunds unused budget (1 tx)
+```
+
+### MPP tools
+
+| Tool | Parameters | What it does |
+|------|-----------|-------------|
+| `mpp_open_session` | `budget` (USDC), `recipient?` (G...) | Deploys the channel contract, deposits the full budget on-chain, and reserves the amount against your spending limits. `recipient` defaults to the `MPP_RECIPIENT` env var. |
+| `mpp_status` | — | Shows the active session's channel address, total budget, cumulative committed spend, and remaining balance. |
+| `mpp_fetch` | `url` | Pays an MPP-gated endpoint using an off-chain commitment against the open session budget. No on-chain transaction per call. |
+| `mpp_close_session` | — | Settles on-chain, pays the recipient, and refunds unused budget. Clears the active session. |
+
+### Spending limits and MPP
+
+The full session `budget` is checked against `MAX_PER_CALL` and `MAX_PER_DAY` at `mpp_open_session` time and **reserved** against your daily allowance for the lifetime of the session. Individual `mpp_fetch` calls within the session do not trigger additional limit checks — they draw down the pre-approved budget. Unused budget is returned to your daily allowance when `mpp_close_session` completes.
+
+<Note>
+  Only one MPP session can be open at a time. Call `mpp_close_session` before opening a new session.
+</Note>
+
+### When to use MPP
+
+MPP is the right choice for **high-frequency or streaming access**: real-time data streams, rapid repeated API calls, or any workflow where you want subscription-style access within a fixed budget. The provider receives guaranteed payment at close, and your agent avoids the latency of per-call on-chain transactions.
+
+---
+
+## x402 vs MPP: choosing the right protocol
+
+| | x402 | MPP |
+|---|------|-----|
+| **Best for** | One-off or infrequent API calls | High-frequency, streaming, or repeated access |
+| **On-chain transactions** | One per request | Two total (open + close) regardless of call count |
+| **Payment timing** | Immediate per request | Settled at session close |
+| **Budget commitment** | Per call at time of request | Full budget locked at open, refunded unused at close |
+| **Provider receives funds** | Immediately after each call | At session close |
+| **Spending limit check** | At each `x402_fetch` call | Once at `mpp_open_session` |
+| **Setup required** | None — just call `x402_fetch` | Open a session with a recipient address |
+| **Requires USDC** | Yes | Yes |
+
+<Tip>
+  If you are unsure which protocol a service supports, start with `x402_fetch`. Services that implement MPP will typically document their channel endpoint and expected flow.
+</Tip>
+
+<CardGroup cols={2}>
+  <Card title="Spending Policy" icon="shield-halved" href="/concepts/spending-policy">
+    Understand how per-call and daily caps apply to payments
+  </Card>
+  <Card title="Wallet" icon="wallet" href="/concepts/wallet">
+    Set up USDC trustline before making payments
+  </Card>
+</CardGroup>

@@ -1,0 +1,115 @@
+---
+title: "Automated Treasury: Earn Yield on Idle Agent Funds"
+sidebarTitle: "Treasury"
+description: "Nebula's treasury engine auto-deposits idle funds to Blend lending pools and withdraws when your agent needs liquidity — no manual management."
+---
+
+Most agent wallets sit idle between tasks. Nebula's treasury changes that: a background rebalancer watches your wallet's liquid balance and automatically moves excess funds into Blend lending pools where they earn supply yield. When your agent needs liquidity — to pay an API, open an MPP session, or make a transfer — the rebalancer withdraws just enough from Blend to keep things running smoothly. Your agent earns yield on its holdings without any manual portfolio management.
+
+## How the rebalancer works
+
+The rebalancer loop runs on a configurable interval (default: every 60 seconds) and applies a simple two-rule policy:
+
+- **If liquid balance exceeds the threshold**: deposit the excess into the configured Blend pool.
+- **If liquid balance falls below the threshold**: withdraw from Blend to restore the target level.
+
+The threshold is the minimum liquid balance your agent should hold at all times. Everything above it is eligible to earn yield; everything below it triggers a withdrawal. You set the threshold once and let the rebalancer handle the rest.
+
+```
+Liquid balance ──────────────────────────────────────────►
+                         ▲ Threshold
+          ┌──────────────┤
+          │ Earn yield   │ Hold liquid
+          │ (Blend)      │ (Wallet)
+          └──────────────┘
+```
+
+<Note>
+  Treasury rebalancing is **not** subject to agent spending limits. Rebalance moves are internal portfolio management between your wallet and your Blend deposit — they are not outbound payments to third parties.
+</Note>
+
+## Treasury tools
+
+| Tool | Parameters | What it does |
+|------|-----------|-------------|
+| `get_treasury_status` | — | Shows liquid balance, Blend deposit amount, supply APY, liquidity threshold, rebalance interval, and the last rebalance action |
+| `set_liquidity_threshold` | `threshold` | Sets the minimum liquid balance; excess above this level auto-deposits to Blend |
+| `optimize_treasury` | — | Triggers one immediate rebalance cycle without waiting for the next scheduled interval |
+| `blend_check_rates` | — | Reads current Blend supply APY for the configured asset (read-only, no transaction, not subject to spending limits) |
+
+## Configuration
+
+Control the treasury entirely through environment variables in your MCP config:
+
+| Variable | Default | Purpose |
+|----------|---------|---------|
+| `TREASURY_ASSET` | `xlm` | Asset to manage in Blend: `xlm` or `usdc` |
+| `LIQUIDITY_THRESHOLD` | `10` | Minimum liquid balance to maintain in the wallet |
+| `REBALANCE_INTERVAL_SECONDS` | `60` | How often the background rebalancer checks and acts |
+| `XLM_FEE_BUFFER` | `5` | XLM reserved for transaction fees when `TREASURY_ASSET=xlm` (never deposited) |
+| `TREASURY_MAX_PER_REBALANCE` | _(none)_ | Optional cap on the amount moved per rebalance cycle |
+
+```json title="Treasury configuration example"
+{
+  "mcpServers": {
+    "nebula": {
+      "command": "npx",
+      "args": ["-y", "nebula-mcp"],
+      "env": {
+        "STELLAR_SECRET_KEY": "S...",
+        "NETWORK": "testnet",
+        "TREASURY_ASSET": "usdc",
+        "LIQUIDITY_THRESHOLD": "20",
+        "REBALANCE_INTERVAL_SECONDS": "30",
+        "TREASURY_MAX_PER_REBALANCE": "500"
+      }
+    }
+  }
+}
+```
+
+### XLM fee buffer
+
+When `TREASURY_ASSET=xlm`, the rebalancer never deposits the entire XLM balance. The `XLM_FEE_BUFFER` amount (default: 5 XLM) is always kept liquid to cover transaction fees and the Stellar minimum account reserve. Without this buffer, your agent could become unable to submit transactions.
+
+### USDC and the Circle trustline
+
+When `TREASURY_ASSET=usdc`, the rebalancer uses your Circle USDC balance. Note that the treasury status output distinguishes between "Circle USDC" (your standard trustline balance) and the USDC deposited in Blend — Circle USDC is not directly usable in Blend positions.
+
+<Warning>
+  Blend treasury integration currently targets **testnet pools**. Verify pool availability on mainnet before relying on yield in a production environment.
+</Warning>
+
+## Checking treasury status
+
+Ask your agent to run `get_treasury_status` at any time for a full snapshot:
+
+```
+Use get_treasury_status from Nebula
+```
+
+The output includes:
+- Liquid balance vs. Blend deposited balance
+- Current supply APY from Blend
+- Your configured liquidity threshold
+- The timestamp and details of the last rebalance action
+- Any rebalancer errors
+
+## Triggering a manual rebalance
+
+The rebalancer runs automatically, but you can trigger an immediate cycle:
+
+```
+Use optimize_treasury from Nebula
+```
+
+This is useful after a large deposit, after changing your threshold, or when you want to verify the rebalancer is working as expected.
+
+<CardGroup cols={2}>
+  <Card title="Wallet" icon="wallet" href="/concepts/wallet">
+    Fund your agent wallet and set up USDC
+  </Card>
+  <Card title="Spending Policy" icon="shield-halved" href="/concepts/spending-policy">
+    Understand what is and isn't subject to spending limits
+  </Card>
+</CardGroup>

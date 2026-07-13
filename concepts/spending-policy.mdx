@@ -1,0 +1,117 @@
+---
+title: "Spending Policy: Keep Your Agent's Payments Bounded"
+sidebarTitle: "Spending Policy"
+description: "Nebula enforces per-call and daily spending caps either through environment variables or a Soroban on-chain contract your agent cannot bypass."
+---
+
+Giving an AI agent a real wallet means making a deliberate choice about autonomy. Nebula's spending policy system lets you set precise boundaries — a per-call cap and a rolling 24-hour daily cap — so your agent can act freely within those limits while remaining impossible to exploit beyond them. You choose whether those limits are enforced in software (fast and zero-cost) or cryptographically on Soroban (tamper-proof and auditable).
+
+## Two enforcement modes
+
+### Off-chain enforcement (env vars)
+
+The simplest option: set two environment variables in your MCP config and Nebula enforces them in process before any transaction is signed.
+
+| Variable | Purpose | Example |
+|----------|---------|---------|
+| `MAX_PER_CALL` | Maximum amount per single transfer or payment | `10` |
+| `MAX_PER_DAY` | Maximum cumulative spend in a rolling 24-hour window | `100` |
+
+```json title="Off-chain limits in mcp.json"
+{
+  "mcpServers": {
+    "nebula": {
+      "command": "npx",
+      "args": ["-y", "nebula-mcp"],
+      "env": {
+        "STELLAR_SECRET_KEY": "S...",
+        "NETWORK": "testnet",
+        "MAX_PER_CALL": "10",
+        "MAX_PER_DAY": "100"
+      }
+    }
+  }
+}
+```
+
+Off-chain limits are evaluated against a rolling in-memory window. They are fast, require no contract deployment, and cost nothing beyond the MCP server process itself.
+
+### On-chain enforcement (Soroban contract)
+
+For stronger guarantees, deploy a `nebula-policy` Soroban smart contract. Once `POLICY_CONTRACT_ID` is set in your MCP environment, every spend is checked against the contract's state before the transaction is signed. The chain enforces the rule — not the config file.
+
+```json title="On-chain policy in mcp.json"
+{
+  "mcpServers": {
+    "nebula": {
+      "command": "npx",
+      "args": ["-y", "nebula-mcp"],
+      "env": {
+        "STELLAR_SECRET_KEY": "S...",
+        "NETWORK": "testnet",
+        "POLICY_CONTRACT_ID": "C..."
+      }
+    }
+  }
+}
+```
+
+<Warning>
+  When `POLICY_CONTRACT_ID` is set, the off-chain `MAX_PER_CALL` and `MAX_PER_DAY` environment variables are **ignored** for enforcement. The on-chain contract is the sole authority. Update limits with `set_policy_limits`, not by editing env vars.
+</Warning>
+
+The on-chain policy produces an immutable, auditable record of every limit check on the Stellar ledger. This is the recommended mode for production agents or any scenario where a third party needs to verify your agent's spend constraints.
+
+## What counts against limits
+
+Not every agent action is subject to spending limits. Read-only and infrastructure operations are exempt by design.
+
+| Action | Subject to limits? |
+|--------|--------------------|
+| `transfer_xlm` | ✅ Yes |
+| `transfer_usdc` | ✅ Yes |
+| `x402_fetch` (USDC payment) | ✅ Yes |
+| `mpp_open_session` (budget deposit) | ✅ Yes |
+| `mpp_fetch` (per-request commitment) | Session budget only |
+| Treasury rebalance (deposit / withdraw) | ❌ No |
+| `blend_check_rates`, `get_treasury_status` | ❌ No (read-only) |
+| `register_identity`, `get_my_reputation` | ❌ No |
+| `check_balance`, `get_address`, `ping` | ❌ No |
+
+<Note>
+  Treasury rebalancing bypasses spending limits by design. The rebalancer moves funds between your wallet and Blend lending pools to manage yield — it is not an outbound payment to a third party. See [Treasury](/concepts/treasury) for configuration options including `TREASURY_MAX_PER_REBALANCE`.
+</Note>
+
+## Policy tools
+
+| Tool | Parameters | What it does |
+|------|-----------|-------------|
+| `spending_report` | — | Shows per-call cap, daily cap, amount spent in the rolling 24h window, and remaining budget. Reads on-chain state when `POLICY_CONTRACT_ID` is set. |
+| `deploy_policy` | `max_per_call?`, `max_per_day?` | Deploys and initializes a new `nebula-policy` Soroban contract. Returns the `POLICY_CONTRACT_ID` to add to your env. |
+| `get_policy_status` | — | Reads current limits and rolling-window usage directly from the on-chain contract. Requires `POLICY_CONTRACT_ID`. |
+| `set_policy_limits` | `max_per_call`, `max_per_day` | Updates caps on the live contract without redeploying. Owner-only operation. |
+
+## Deploying an on-chain policy
+
+Ask your agent to run `deploy_policy` with your desired limits. It will deploy the on-chain policy contract, initialize it with those limits, and return a `POLICY_CONTRACT_ID` (`C...`) for you to add to your MCP environment:
+
+```
+Use deploy_policy from Nebula with max_per_call 10 and max_per_day 100
+```
+
+Once you add `POLICY_CONTRACT_ID` to your config and restart the MCP server, every subsequent spend checks the contract first. Use `set_policy_limits` any time you want to tighten or loosen the caps — no redeploy required.
+
+## How the rolling daily window works
+
+The daily cap is enforced over a **rolling 24-hour window**, not a calendar day. If your agent spends 50 units at 3 PM, that spend counts against the cap until 3 PM the following day. This prevents agents from bunching large spends at midnight resets.
+
+Open MPP session budgets are counted as **reserved** against your daily allowance for the duration of the session, even before individual `mpp_fetch` calls commit funds. Unused budget is released back to your allowance when `mpp_close_session` runs.
+
+<CardGroup cols={2}>
+  <Card title="Wallet" icon="wallet" href="/concepts/wallet">
+    Set up your agent wallet and fund it on testnet
+  </Card>
+  <Card title="Payments" icon="bolt" href="/concepts/payments">
+    Understand how x402 and MPP payments count against limits
+  </Card>
+</CardGroup>

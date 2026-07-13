@@ -1,0 +1,287 @@
+---
+title: "Nebula MCP Tools: Complete Reference for All 23 Tools"
+sidebarTitle: "Tools"
+description: "Complete reference for all 23 Nebula MCP tools organized by category: wallet, transfers, spending policy, x402, MPP, treasury, and agent identity."
+---
+
+Nebula exposes 23 MCP tools that give your AI agent a full Stellar blockchain wallet with payments, yield, spending controls, and on-chain identity. Every tool is invoked directly from your agent's chat interface — just say **"Use `<tool_name>` from Nebula"**. No code required. The sections below document every tool's parameters, behavior, spending-limit status, and an example chat prompt you can paste directly.
+
+## All 23 tools at a glance
+
+| Tool | Category | Subject to spending limits? |
+|------|----------|-----------------------------|
+| `ping` | Wallet | No |
+| `help` | Wallet | No |
+| `get_address` | Wallet | No |
+| `check_balance` | Wallet | No |
+| `wallet_dashboard` | Wallet | No |
+| `request_funding` | Wallet | No |
+| `transfer_xlm` | Transfers | **Yes** |
+| `transfer_usdc` | Transfers | **Yes** |
+| `spending_report` | Spending limits | No |
+| `deploy_policy` | On-chain policy | No |
+| `get_policy_status` | On-chain policy | No |
+| `set_policy_limits` | On-chain policy | No |
+| `x402_fetch` | x402 payments | **Yes** |
+| `mpp_open_session` | MPP sessions | **Yes** (budget) |
+| `mpp_status` | MPP sessions | No |
+| `mpp_fetch` | MPP sessions | Against session budget |
+| `mpp_close_session` | MPP sessions | No |
+| `get_treasury_status` | Treasury | No |
+| `set_liquidity_threshold` | Treasury | No |
+| `optimize_treasury` | Treasury | No |
+| `blend_check_rates` | Treasury | No |
+| `register_identity` | Agent identity | No |
+| `get_my_reputation` | Agent identity | No |
+
+---
+
+## Wallet & dashboard
+
+These six tools cover the core wallet lifecycle: connectivity checks, balance queries, and funding your agent.
+
+| Tool | Parameters | What it does | Limits? |
+|------|-----------|--------------|---------|
+| `ping` | — | Health check — confirms the Nebula MCP server is running and returns the current timestamp. | No |
+| `help` | `category?` (string) | Full feature guide for all tools by category, environment variables, quick-start prompts, and your current config status. | No |
+| `get_address` | — | Returns the wallet public key (`G...`) for the configured `STELLAR_SECRET_KEY`. | No |
+| `check_balance` | — | Returns XLM and USDC balances for the wallet on the configured network. | No |
+| `wallet_dashboard` | — | Renders an **interactive in-chat UI** (MCP Apps) showing balances, spending limits, treasury status, active MPP session, and 8004 identity. | No |
+| `request_funding` | — | Returns a Friendbot link on testnet, or manual funding instructions on mainnet. | No |
+
+**`help` parameter details**
+
+<ParamField query="category" type="string" optional>
+  Filter the guide to one topic. Accepted values: `wallet`, `transfers`, `limits`, `policy`, `x402`, `mpp`, `treasury`, `identity`.
+</ParamField>
+
+**Example prompts**
+
+```text
+Use ping from Nebula
+Use get_address from Nebula
+Use check_balance from Nebula
+Use wallet_dashboard from Nebula
+Use request_funding from Nebula
+Use help from Nebula with category transfers
+```
+
+---
+
+## Transfers
+
+Send XLM or USDC to any Stellar address. Both tools are checked against your spending limits before the transaction signs.
+
+| Tool | Parameters | What it does | Limits? |
+|------|-----------|--------------|---------|
+| `transfer_xlm` | `destination` (string), `amount` (string) | Sends XLM to a Stellar address on the configured network. | **Yes** |
+| `transfer_usdc` | `destination` (string), `amount` (string) | Sends USDC to a Stellar address. Requires a USDC trustline on the destination account. | **Yes** |
+
+**`transfer_xlm` / `transfer_usdc` parameter details**
+
+<ParamField query="destination" type="string" required>
+  Recipient Stellar public address starting with `G`.
+</ParamField>
+
+<ParamField query="amount" type="string" required>
+  Amount to send as a decimal string, e.g. `"1.5"` for XLM or `"0.50"` for USDC.
+</ParamField>
+
+<Warning>
+  Both transfer tools check your per-call cap (`MAX_PER_CALL`) and rolling 24-hour cap (`MAX_PER_DAY`) before signing. If either limit would be exceeded, the transfer is blocked and the reason is returned.
+</Warning>
+
+**Example prompts**
+
+```text
+Use transfer_xlm from Nebula with destination GABCDE...XYZ and amount 5
+Use transfer_usdc from Nebula with destination GABCDE...XYZ and amount 0.50
+```
+
+---
+
+## Spending limits
+
+<Accordion title="spending_report">
+
+| Tool | Parameters | What it does | Limits? |
+|------|-----------|--------------|---------|
+| `spending_report` | — | Returns the per-call cap, daily cap, amount spent in the rolling 24-hour window, any active MPP session reserved amount, and remaining budget. When `POLICY_CONTRACT_ID` is set, reads the on-chain policy instead of the off-chain env vars. | No |
+
+Use `spending_report` any time you want to know how much budget your agent has consumed and what headroom remains.
+
+**Example prompt**
+
+```text
+Use spending_report from Nebula
+```
+
+</Accordion>
+
+---
+
+## On-chain policy (Soroban)
+
+Deploy a Soroban smart contract to enforce spending limits at the blockchain level. Once a `POLICY_CONTRACT_ID` is set, it overrides the off-chain `MAX_PER_CALL` and `MAX_PER_DAY` environment variables and creates an immutable on-chain audit trail.
+
+| Tool | Parameters | What it does | Limits? |
+|------|-----------|--------------|---------|
+| `deploy_policy` | `max_per_call?` (string), `max_per_day?` (string) | Deploys and initializes a new `nebula-policy` Soroban contract using the bundled WASM. Returns the `POLICY_CONTRACT_ID` to add to your MCP env. | No |
+| `get_policy_status` | — | Reads the on-chain limits and rolling-window usage from the policy contract. Requires `POLICY_CONTRACT_ID` to be set. | No |
+| `set_policy_limits` | `max_per_call` (string), `max_per_day` (string) | Updates per-call and daily caps on the existing policy contract (owner only, no redeploy needed). | No |
+
+**`deploy_policy` parameter details**
+
+<ParamField query="max_per_call" type="string" optional>
+  Initial per-call spending limit. Defaults to the `MAX_PER_CALL` environment variable if omitted.
+</ParamField>
+
+<ParamField query="max_per_day" type="string" optional>
+  Initial rolling 24-hour spending limit. Defaults to the `MAX_PER_DAY` environment variable if omitted.
+</ParamField>
+
+**`set_policy_limits` parameter details**
+
+<ParamField query="max_per_call" type="string" required>
+  New per-call limit in XLM/USDC units, e.g. `"10"`.
+</ParamField>
+
+<ParamField query="max_per_day" type="string" required>
+  New rolling 24-hour daily limit, e.g. `"50"`.
+</ParamField>
+
+<Note>
+  After running `deploy_policy`, copy the returned contract ID into your MCP config as `POLICY_CONTRACT_ID`. From that point on, `MAX_PER_CALL` and `MAX_PER_DAY` env vars are ignored for enforcement.
+</Note>
+
+**Example prompts**
+
+```text
+Use deploy_policy from Nebula with max_per_call 10 and max_per_day 50
+Use get_policy_status from Nebula
+Use set_policy_limits from Nebula with max_per_call 20 and max_per_day 100
+```
+
+---
+
+## x402 payments
+
+Your agent can autonomously pay for HTTP APIs that return a `402 Payment Required` response with USDC via the x402 protocol — no human intervention needed.
+
+| Tool | Parameters | What it does | Limits? |
+|------|-----------|--------------|---------|
+| `x402_fetch` | `url` (string) | GETs a URL. On HTTP 402, parses the payment terms, pays USDC automatically, and retries the request with the payment header. Subject to spending limits. | **Yes** |
+
+**`x402_fetch` parameter details**
+
+<ParamField query="url" type="string" required>
+  The URL to fetch. Must be a valid HTTP or HTTPS URL. The tool handles the full request → 402 → pay → retry flow automatically.
+</ParamField>
+
+<Tip>
+  x402 payments count against your `MAX_PER_CALL` and `MAX_PER_DAY` limits just like direct transfers. Use `spending_report` to check remaining budget before making a series of paid API calls.
+</Tip>
+
+**Example prompt**
+
+```text
+Use x402_fetch from Nebula with url https://api.example.com/premium-data
+```
+
+---
+
+## MPP sessions (streaming / high-frequency)
+
+MPP (Micro-Payment Protocol) sessions let your agent make many micro-payments with a single on-chain deposit, settling everything in one final transaction. This is ideal for high-frequency API calls where per-request on-chain transactions would be too slow or expensive.
+
+**Typical flow:** `mpp_open_session` → `mpp_fetch` (repeat as needed) → `mpp_close_session`
+
+| Tool | Parameters | What it does | Limits? |
+|------|-----------|--------------|---------|
+| `mpp_open_session` | `budget` (string), `recipient?` (string) | Deploys a one-way payment channel Soroban contract and deposits the session budget on-chain. The budget counts against spending limits. | **Yes** (budget) |
+| `mpp_status` | — | Returns the active session's channel address, total budget, committed spend so far, and remaining balance. | No |
+| `mpp_fetch` | `url` (string) | Fetches an MPP-gated URL using off-chain signed commitments — no per-request on-chain transaction. Rejects payments that would exceed session budget. | Against session budget |
+| `mpp_close_session` | — | Settles the session on-chain: pays the accumulated committed amount to the recipient and refunds any unused deposit. | No |
+
+**`mpp_open_session` parameter details**
+
+<ParamField query="budget" type="string" required>
+  Total session budget in USDC, e.g. `"1.0"`. This amount is deposited on-chain immediately and counted against `MAX_PER_CALL` and `MAX_PER_DAY`.
+</ParamField>
+
+<ParamField query="recipient" type="string" optional>
+  Recipient Stellar public address (`G...`) for channel payouts. Defaults to the `MPP_RECIPIENT` environment variable.
+</ParamField>
+
+**`mpp_fetch` parameter details**
+
+<ParamField query="url" type="string" required>
+  MPP channel-gated URL to fetch. Payments are made via off-chain cumulative commitments — no on-chain transaction per call.
+</ParamField>
+
+<Note>
+  Only one MPP session can be active at a time. Call `mpp_close_session` before opening a new one.
+</Note>
+
+**Example prompts**
+
+```text
+Use mpp_open_session from Nebula with budget 1.0 and recipient GABCDE...XYZ
+Use mpp_status from Nebula
+Use mpp_fetch from Nebula with url https://stream.example.com/data
+Use mpp_close_session from Nebula
+```
+
+---
+
+## Treasury & yield (Blend)
+
+Nebula's background rebalancer automatically moves idle funds into Blend lending pools to earn yield, withdrawing when your liquid balance drops below a threshold. The tools below let you inspect and control that process.
+
+| Tool | Parameters | What it does | Limits? |
+|------|-----------|--------------|---------|
+| `get_treasury_status` | — | Shows liquid balance, Blend deposit amount, supply APY, liquidity threshold, rebalance interval, and last rebalance details. | No |
+| `set_liquidity_threshold` | `threshold` (string) | Sets the minimum liquid balance. Funds above this threshold are auto-deposited to Blend on the next rebalance cycle. | No |
+| `optimize_treasury` | — | Triggers a single rebalance immediately (deposit excess or withdraw to threshold), without waiting for the next automatic cycle. | No |
+| `blend_check_rates` | — | Returns the current Blend supply APY rates on testnet (read-only, no transaction). | No |
+
+**`set_liquidity_threshold` parameter details**
+
+<ParamField query="threshold" type="string" required>
+  Minimum liquid balance to keep on hand, e.g. `"10"` for 10 XLM. Funds above this level are eligible for Blend deposit.
+</ParamField>
+
+<Note>
+  Treasury rebalancing is **not** subject to agent spending limits. `TREASURY_MAX_PER_REBALANCE` is a separate cap that limits how much the rebalancer can move in a single transaction.
+</Note>
+
+**Example prompts**
+
+```text
+Use get_treasury_status from Nebula
+Use set_liquidity_threshold from Nebula with threshold 20
+Use optimize_treasury from Nebula
+Use blend_check_rates from Nebula
+```
+
+---
+
+## Agent identity (Stellar8004)
+
+Register your agent on-chain with a unique identity NFT and track its reputation across clients.
+
+| Tool | Parameters | What it does | Limits? |
+|------|-----------|--------------|---------|
+| `register_identity` | — | Mints an ERC-8004 agent NFT for this wallet using the Stellar8004 contracts. Idempotent — safe to call even if already registered. | No |
+| `get_my_reputation` | — | Returns this agent's feedback count, average score, and number of unique clients from the on-chain reputation registry. | No |
+
+<Tip>
+  Use `AGENT8004_NAME`, `AGENT8004_DESCRIPTION`, and `AGENT8004_IMAGE_URL` environment variables to set your agent's display metadata before calling `register_identity`.
+</Tip>
+
+**Example prompts**
+
+```text
+Use register_identity from Nebula
+Use get_my_reputation from Nebula
+```

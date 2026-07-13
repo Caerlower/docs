@@ -1,0 +1,150 @@
+---
+title: "Quickstart: Add Nebula MCP Wallet to Claude in Minutes"
+sidebarTitle: "Quickstart"
+description: "Connect Nebula to Claude or any MCP-compatible agent, fund your Stellar wallet, and make your first automated payment in under 5 minutes."
+---
+
+Nebula is published on npm as `nebula-mcp` and requires no build step. You add a JSON block to your MCP config, restart Claude, and your agent has a live Stellar wallet. This guide walks you from zero to a funded, policy-enforced wallet ready for autonomous payments.
+
+<Note>
+All steps below use **testnet** — the default network. Testnet XLM is free and Friendbot funds your wallet instantly. You can safely explore every capability without touching real funds.
+</Note>
+
+<Steps>
+  <Step title="Add Nebula to your MCP config">
+    Open your MCP configuration file and add the `nebula` server block. The file location depends on your client:
+
+    - **Claude Desktop** — `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS) or `%APPDATA%\Claude\claude_desktop_config.json` (Windows)
+    - **Claude Code** — project `.mcp.json` or your global MCP settings
+
+    ```json mcp-config.json
+    {
+      "mcpServers": {
+        "nebula": {
+          "command": "npx",
+          "args": ["-y", "nebula-mcp"],
+          "env": {
+            "STELLAR_SECRET_KEY": "YOUR_STELLAR_SECRET_KEY",
+            "NETWORK": "testnet",
+            "MAX_PER_CALL": "1000",
+            "MAX_PER_DAY": "10000",
+            "POLICY_CONTRACT_ID": "",
+            "TREASURY_ASSET": "xlm",
+            "LIQUIDITY_THRESHOLD": "10",
+            "REBALANCE_INTERVAL_SECONDS": "60",
+            "MPP_RECIPIENT": ""
+          }
+        }
+      }
+    }
+    ```
+
+    Replace `YOUR_STELLAR_SECRET_KEY` with a Stellar secret key starting with `S`. If you don't have one yet, you can generate a new keypair at [laboratory.stellar.org](https://laboratory.stellar.org) — use the **Generate Keypair** tool under **Account Creator**.
+
+    <Warning>
+    Never commit your `STELLAR_SECRET_KEY` to version control. Treat it like a password — store it only in your MCP config or a secrets manager.
+    </Warning>
+
+    After saving the file, **restart Claude** to load the new server.
+
+    <Tip>
+    Using Claude Desktop without a terminal? A one-click `.mcpb` installer is available — double-click `nebula.mcpb` to run the install wizard and enter your secret key. See [installation options](#installation-options) below for details.
+    </Tip>
+  </Step>
+
+  <Step title="Get your Stellar address">
+    Once Claude restarts, ask it to call the `get_address` tool. This returns your wallet's public key — the `G...` address you'll use to receive funds.
+
+    ```text
+    Use get_address from Nebula
+    ```
+
+    Copy the `G...` address from the response. You'll need it to receive testnet XLM in the next step.
+  </Step>
+
+  <Step title="Fund your wallet">
+    Your wallet needs XLM to pay transaction fees and hold a minimum balance.
+
+    **On testnet**, ask your agent to call `request_funding`. Nebula will return a Friendbot link that credits your wallet with free testnet XLM instantly:
+
+    ```text
+    Use request_funding from Nebula
+    ```
+
+    **On mainnet**, you must fund the wallet manually by sending XLM from an exchange or another wallet to your `G...` address. The minimum balance required to activate a Stellar account is 1 XLM.
+
+    <Note>
+    To use USDC (required for x402 and MPP payments), your wallet also needs a USDC trustline. On testnet, you can get test USDC from the [Circle faucet](https://faucet.circle.com/) after your account is funded.
+    </Note>
+  </Step>
+
+  <Step title="Check your balance">
+    Verify your wallet is funded and ready:
+
+    ```text
+    Use check_balance from Nebula
+    ```
+
+    Your agent will return the current XLM and USDC balances on the configured network. If the XLM balance is greater than zero, your wallet is active and your spending policy is live.
+  </Step>
+
+  <Step title="Open the wallet dashboard">
+    The dashboard renders an interactive UI directly inside chat — balances, spending limits, treasury status, active MPP session, and 8004 identity at a glance:
+
+    ```text
+    Use wallet_dashboard from Nebula
+    ```
+
+    <Note>
+    The interactive dashboard requires **MCP Apps** support. It renders fully in Claude Desktop. In environments that don't support MCP Apps, Nebula returns the same information as formatted text.
+    </Note>
+  </Step>
+</Steps>
+
+## First commands to try
+
+Once your wallet is funded, explore what your agent can do:
+
+```text
+Use help from Nebula
+Use wallet_dashboard from Nebula
+Use spending_report from Nebula
+Use get_address from Nebula
+Use request_funding from Nebula
+Use check_balance from Nebula
+```
+
+For payments, try fetching an x402-gated URL:
+
+```text
+Use x402_fetch from Nebula with url https://your-402-api.example.com/resource
+```
+
+## Testnet vs mainnet
+
+| | Testnet | Mainnet |
+|---|---|---|
+| Default | ✓ (no config needed) | Set `NETWORK=mainnet` |
+| Free XLM | ✓ via Friendbot (`request_funding`) | Fund manually from exchange |
+| Test USDC | ✓ via Circle testnet faucet | Real USDC |
+| Blend yield | Testnet pools | Verify pool availability before use |
+| Stellar8004 | Testnet contracts | Mainnet contracts |
+
+## Installation options
+
+| Option | Best for |
+|---|---|
+| **Option A — `npx` via MCP config** (recommended) | Most users. No install, no build step. |
+| **Option B — `.mcpb` one-click installer** | Claude Desktop users without terminal access. Double-click `nebula.mcpb` and enter your secret key in the wizard. |
+| **Option C — Build from source** | Contributors and advanced users who want to run from source. Clone the repo and follow the instructions in `INSTALL.md`. |
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Tools Reference" icon="wrench" href="/reference/tools">
+    Explore all 23 tools — parameters, what they do, and example prompts.
+  </Card>
+  <Card title="Configuration" icon="sliders" href="/configuration">
+    Tune your spending limits, treasury settings, and agent identity metadata.
+  </Card>
+</CardGroup>

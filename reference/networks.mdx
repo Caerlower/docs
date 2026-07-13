@@ -1,0 +1,120 @@
+---
+title: "Configuring Nebula for Stellar Testnet and Mainnet"
+sidebarTitle: "Networks"
+description: "Configure Nebula for Stellar testnet or mainnet. Testnet is the default — switch to mainnet by setting NETWORK=mainnet in your MCP config."
+---
+
+Nebula defaults to Stellar **testnet** so you can explore every feature with no financial risk. When you are ready to use real funds, switching to mainnet is a single environment variable change. The two networks share the same tool interface, but differ in how you fund your wallet, which USDC issuer is used, and which on-chain contracts back treasury and identity features.
+
+## Testnet vs. mainnet comparison
+
+| Feature | Testnet | Mainnet |
+|---------|---------|---------|
+| **Default** | ✅ (no config needed) | Set `NETWORK=mainnet` |
+| **Funding method** | Friendbot via `request_funding` | Fund manually with real XLM and USDC |
+| **USDC issuer** | Circle testnet SAC | Circle mainnet issuer |
+| **Blend treasury** | Testnet lending pools | Verify pool availability before use |
+| **Stellar8004 identity** | Testnet contracts | Mainnet contracts |
+| **Transaction cost** | Free (test tokens) | Real XLM fees |
+
+---
+
+## Getting started on testnet
+
+Follow these three steps to have a fully funded testnet agent ready to send payments and earn yield.
+
+**Step 1 — Fund XLM using Friendbot**
+
+Ask your agent to call `request_funding`. Nebula returns a Friendbot link that credits your wallet with 10,000 test XLM in seconds.
+
+```text
+Use request_funding from Nebula
+```
+
+**Step 2 — Add a USDC trustline and get test USDC**
+
+USDC transfers and x402 payments require a USDC trustline on your wallet. Visit the Circle testnet faucet to establish the trustline and receive test USDC:
+
+[https://faucet.circle.com/](https://faucet.circle.com/)
+
+Select **Stellar Testnet**, paste your wallet address (from `get_address`), and the faucet establishes the trustline and sends test USDC automatically.
+
+**Step 3 — Set spending limits**
+
+Add `MAX_PER_CALL` and `MAX_PER_DAY` to your MCP config to authorize your agent to spend. Start conservatively and increase them once you are comfortable with the behavior.
+
+```json
+{
+  "mcpServers": {
+    "nebula": {
+      "command": "npx",
+      "args": ["-y", "nebula-mcp"],
+      "env": {
+        "STELLAR_SECRET_KEY": "S...",
+        "NETWORK": "testnet",
+        "MAX_PER_CALL": "10",
+        "MAX_PER_DAY": "100"
+      }
+    }
+  }
+}
+```
+
+<Tip>
+  Once funded, run `Use wallet_dashboard from Nebula` to see balances, limits, and treasury status all in one interactive view.
+</Tip>
+
+---
+
+## Switching to mainnet
+
+When you are ready to go live, follow these steps in order.
+
+**1. Set `NETWORK=mainnet` in your MCP config**
+
+```json
+{
+  "mcpServers": {
+    "nebula": {
+      "command": "npx",
+      "args": ["-y", "nebula-mcp"],
+      "env": {
+        "STELLAR_SECRET_KEY": "S...",
+        "NETWORK": "mainnet",
+        "MAX_PER_CALL": "10",
+        "MAX_PER_DAY": "100"
+      }
+    }
+  }
+}
+```
+
+**2. Fund your wallet with real XLM and USDC**
+
+Friendbot is not available on mainnet. Acquire XLM from an exchange and send it to your wallet address. For USDC, use the Circle mainnet issuer or a supported exchange. Keep enough XLM for transaction fees (the `XLM_FEE_BUFFER` default is 5 XLM).
+
+<Note>
+  Stellar transaction fees are extremely low — typically fractions of a cent per transaction. The 5 XLM fee buffer is more than enough to cover thousands of transactions, so your agent can operate economically even when making frequent payments or rebalancing the treasury.
+</Note>
+
+**3. Deploy an on-chain policy for stronger enforcement**
+
+Off-chain limits work well for testing, but for production use you should deploy a Soroban policy contract. This creates a tamper-proof on-chain audit trail of every spend.
+
+```text
+Use deploy_policy from Nebula with max_per_call 10 and max_per_day 100
+```
+
+Copy the returned `POLICY_CONTRACT_ID` into your MCP env and remove `MAX_PER_CALL` / `MAX_PER_DAY` (or keep them as documentation — they are ignored once a policy contract is set).
+
+**4. Verify Blend pool availability**
+
+Blend lending pools on mainnet may differ from testnet. Run `blend_check_rates` and `get_treasury_status` to confirm the pools you intend to use are active and returning expected APY before enabling the background rebalancer.
+
+<Warning>
+  Never use a mainnet secret key (`STELLAR_SECRET_KEY`) in a testnet configuration, or a testnet key in a mainnet configuration. The Stellar networks are completely separate — a key generated for one network has no funds on the other, and sending transactions to the wrong network will fail silently or consume real fees for no effect.
+</Warning>
+
+<Note>
+  Always test your full agent workflow on testnet before switching to mainnet. Testnet resets periodically, but it faithfully mirrors mainnet behavior for all Nebula features.
+</Note>
